@@ -1912,6 +1912,7 @@ public class MindcraftiMcpController {
                 : workbookLessonRoster.resolve(teacher, lesson);
         result.put("studentRosterSource", effectiveRoster.source());
         result.put("studentMembershipNeedsTeacherReview", effectiveRoster.needsTeacherReview());
+        result.put("studentRosterIds", effectiveRoster.students().stream().map(student -> student.id().toString()).toList());
         List<Map<String,Object>> studentContexts = new ArrayList<>();
         for (WorkbookLessonRosterService.Student student : effectiveRoster.students()) {
             UUID studentId = student.id();
@@ -1979,12 +1980,12 @@ public class MindcraftiMcpController {
             }
             item.put("documentedCardErrors", errorEvidence);
             if (schoolCalendarService != null
-                    && studentUser.getGrade() instanceof Integer level
-                    && studentUser.getSchoolType() instanceof String schoolType) {
+                    && studentUser.getGrade() != null
+                    && studentUser.getSchoolType() != null) {
                 try {
                     item.put("schoolCalendarReference",
-                            schoolCalendarService.referenceForStudent(level, schoolType,
-                                    lessonDate.getMonthValue()));
+                            schoolCalendarService.referenceForStudent(studentUser.getGrade(),
+                                    String.valueOf(studentUser.getSchoolType()), lessonDate.getMonthValue()));
                 } catch (RuntimeException unavailable) {
                     item.put("schoolCalendarReference",
                             Map.of("available", false, "reason", "CALENDAR_TEMPORARILY_UNAVAILABLE"));
