@@ -5,7 +5,7 @@ import { useI18n } from '../i18n/I18nContext';
 import { IosPushInstallGuide } from './IosPushInstallGuide';
 
 type Role = 'PARENT' | 'STUDENT' | 'TEACHER' | 'ADMIN';
-type Phase = 'checking' | 'hidden' | 'ready' | 'ios-install' | 'denied' | 'enabled' | 'error';
+type Phase = 'checking' | 'hidden' | 'ready' | 'ios-install' | 'native-setup' | 'denied' | 'enabled' | 'error';
 type PushConfig = { enabled: boolean; publicKey: string };
 // Parent and staff alerts are time-sensitive; never hide setup for two weeks.
 const DISMISS_DAYS = 1;
@@ -13,6 +13,15 @@ const DISMISS_DAYS = 1;
 function isIPhoneOrIPad() {
   return /iPhone|iPad|iPod/i.test(navigator.userAgent)
     || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+/** TestFlight build v0.1.0(2) already appends mobileRefresh to its WebView URL. */
+function nativeShell() {
+  try {
+    if (new URLSearchParams(window.location.search).has('mobileRefresh'))
+      sessionStorage.setItem('mindcrafti.nativeApp','yes');
+    return sessionStorage.getItem('mindcrafti.nativeApp') === 'yes';
+  } catch { return false; }
 }
 
 function homeScreenApp() {
@@ -77,6 +86,18 @@ export function PushQuickStart({ userId, role, quiet = false }: { userId: string
     setShowIosGuide(false);
 
     const check = async () => {
+      // The installed TestFlight app uses native Expo/APNs, not Safari Web Push.
+      // It already requests iOS permission on sign-in; never tell its users
+      // to install a second PWA or request permission inside a WebView.
+      if (nativeShell()) {
+        try {
+          const nativeStatus = await api.mobilePush.status();
+          if(active) setPhase(nativeStatus.ready ? 'enabled' : 'native-setup');
+        } catch {
+          if(active) setPhase('native-setup');
+        }
+        return;
+      }
       // On iPhone, Web Push is available to an installed Home Screen app,
       // not a normal Safari tab. Explain installation before feature detection.
       const iosBrowser = isIPhoneOrIPad() && !homeScreenApp();
@@ -194,6 +215,7 @@ export function PushQuickStart({ userId, role, quiet = false }: { userId: string
       : (de ? 'Wir erinnern dich an offene Hausaufgaben und tägliche Lernkarten.'
         : 'Напомним о домашке и ежедневных карточках.');
   const ios = phase === 'ios-install';
+  const native = phase === 'native-setup';
   const denied = phase === 'denied';
   return <><section className="panel" aria-label={de ? 'Benachrichtigungen einrichten' : 'Подключить уведомления'}
     style={{ display: 'flex', gap: 12, padding: 16, marginBottom: 16, alignItems: 'flex-start' }}>
@@ -205,6 +227,11 @@ export function PushQuickStart({ userId, role, quiet = false }: { userId: string
         {de
           ? 'iPhone/iPad: In Safari auf „Teilen“ → „Zum Home-Bildschirm“ tippen. Mindcrafti über das neue Symbol öffnen und dann die Benachrichtigungen erlauben.'
           : 'iPhone/iPad: в Safari нажмите «Поделиться» → «На экран Домой». Откройте Mindcrafti с нового значка, затем разрешите уведомления.'}
+      </p>}
+      {native && <p style={{ margin: '0 0 10px' }}>
+        {de
+          ? 'Die installierte TestFlight App fragt die iPhone-Erlaubnis bei der Anmeldung. Wenn sie bereits blockiert ist: iPhone Einstellungen → Mitteilungen → Mindcrafti aktivieren, dann App neu starten.'
+          : 'Приложение TestFlight запрашивает разрешение iPhone после входа. Если оно было отклонено: «Настройки iPhone → Уведомления → Mindcrafti» и включите уведомления, затем перезапустите приложение.'}
       </p>}
       {denied && <p style={{ margin: '0 0 10px' }}>
         {de ? 'Benachrichtigungen wurden im Browser blockiert. Erlauben Sie sie in den Browser- bzw. App-Einstellungen.'
