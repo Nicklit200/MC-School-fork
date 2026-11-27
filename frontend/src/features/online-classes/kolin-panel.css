@@ -125,6 +125,26 @@
   .kolin-rich__formula { padding:8px 6px; }
 }
 
+
+/* In the four-pupil overview, keep the per-page review legible without
+   letting it consume the worksheet tile. The page itself is narrowed by
+   WhiteboardPanel; this only tightens the feedback typography and spacing. */
+.whiteboard--compact-preview.whiteboard--page-reviews .kolin-saved-page--inline {
+  gap:6px;
+  padding:7px;
+  font-size:10px;
+}
+.whiteboard--compact-preview.whiteboard--page-reviews .kolin-saved-page--inline > header {
+  gap:4px;
+  padding-bottom:5px;
+}
+.whiteboard--compact-preview.whiteboard--page-reviews .kolin-saved-page--inline > header strong { font-size:10px; }
+.whiteboard--compact-preview.whiteboard--page-reviews .kolin-saved-page--inline > header span,
+.whiteboard--compact-preview.whiteboard--page-reviews .kolin-saved-page__status,
+.whiteboard--compact-preview.whiteboard--page-reviews .kolin-saved-page__content { font-size:10px; }
+.whiteboard--compact-preview.whiteboard--page-reviews .kolin-rich { gap:5px; font-size:10px; line-height:1.4; }
+.whiteboard--compact-preview.whiteboard--page-reviews .kolin-rich__callout { gap:5px; padding:5px; }
+
 /* Read-only current page feedback; never covers the writing surface. */
 .kolin-saved-page { flex-shrink:0; min-width:0; border:1px solid var(--v3-edge); border-radius:8px; padding:8px 10px; font-size:12px; overflow-wrap:anywhere; }
 .kolin-saved-page summary { cursor:pointer; font-weight:650; }

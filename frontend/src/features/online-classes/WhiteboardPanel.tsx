@@ -164,10 +164,11 @@ export function WhiteboardPanel({
   const personal = isPersonalBoard(targetId);
   const ownerId = personalBoardOwner(targetId);
   const studentFollowRequested = isHost && personal && followStudent;
-  // Only the authorized host's own focused, independently navigated PDF view.
-  // The exact pupil-viewport mirror and four-board overview remain unchanged.
+  // Show the saved Kolyn feedback beside every visible personal page, including
+  // each pupil tile in the four-student overview. Only pupil-viewport mirroring
+  // suppresses it, because that view must reproduce the pupil's exact viewport.
   const showPageAnalysis = isHost && Boolean(ownerId) && targetType === 'WHITEBOARD'
-    && automaticPageAnalysisEnabled && !compactPreview && !studentFollowRequested;
+    && automaticPageAnalysisEnabled && !studentFollowRequested;
   const pageAnalyses = useSavedPageAnalyses(classId, ownerId ?? undefined, targetId, showPageAnalysis && active);
   const [tool, setTool] = useState<Tool>('pen');
   const [toolSettings, setToolSettings] = useState<Record<Tool, ToolSettings>>(
@@ -422,10 +423,14 @@ export function WhiteboardPanel({
   }, [continuous, locked, active, classId, targetType, targetId, cancelDocumentFrame]);
   const layoutWidth = studentView?.layout === 'continuous' ? studentView.viewport.width : pageWidth;
   const layoutHeight = studentView?.layout === 'continuous' ? Math.max(1, Math.round(studentView.viewport.height * .92)) : pageHeight;
-  const reviewWidth = showPageAnalysis ? Math.max(165, Math.min(340, Math.round(layoutWidth * .32))) : 0;
-  const reviewGap = showPageAnalysis ? 12 : 0;
+  const reviewWidth = !showPageAnalysis ? 0 : compactPreview
+    ? Math.max(88, Math.min(210, Math.round(layoutWidth * .30)))
+    : Math.max(165, Math.min(340, Math.round(layoutWidth * .32)));
+  const reviewGap = showPageAnalysis ? compactPreview ? 8 : 12 : 0;
   const reviewExtra = reviewWidth + reviewGap;
-  const paperLayoutWidth = showPageAnalysis ? Math.max(140, layoutWidth - reviewExtra) : layoutWidth;
+  const paperLayoutWidth = showPageAnalysis
+    ? Math.max(compactPreview ? 96 : 140, layoutWidth - reviewExtra)
+    : layoutWidth;
   const basePageSizes = useMemo(() => Array.from({ length: pages.count }, (_, index) => documentPageSize(paperLayoutWidth, layoutHeight,
     pageAspects[index] ?? (sourceAspect && Number.isFinite(sourceAspect) && sourceAspect > 0 ? sourceAspect : A4_PORTRAIT_ASPECT))),
   [pages.count, paperLayoutWidth, layoutHeight, pageAspects, sourceAspect]);
