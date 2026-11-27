@@ -171,7 +171,7 @@ export default function App() {
 
   if (!accessToken || !user) {
     return <SafeAreaView style={styles.root}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fffaf7" />
+      <StatusBar barStyle="dark-content" />
       <View pointerEvents="none" style={[styles.decorRing, styles.decorRingTop]} />
       <View pointerEvents="none" style={[styles.decorRing, styles.decorRingBottom]} />
       <View pointerEvents="none" style={[styles.decorDots, styles.decorDotsTop]}>
