@@ -123,12 +123,23 @@ public class PostLessonSkillReviewService {
         } else {
             return;
         }
+        // A timetable slot is not attendance. The queued snapshot must contain
+        // only assigned pupils who actually joined, wrote on their personal board,
+        // or spoke in an authenticated transcript. This also covers browser/media
+        // failures when a pupil still worked on the board.
         List<String> roster = pupils.stream()
                 .filter(student->student.getRole()==Role.STUDENT
                         && student.getStatus()==UserStatus.ACTIVE && !student.isArchived()
                         && student.getTeacher()!=null && teacherId.equals(student.getTeacher().getId()))
-                .map(student->student.getId().toString()).distinct().limit(MAX_PUPILS+1).toList();
-        if(roster.isEmpty() || roster.size()>MAX_PUPILS) return;
+                .map(User::getId).distinct()
+                .filter(studentId->participated(classId,studentId))
+                .limit(MAX_PUPILS+1)
+                .map(UUID::toString).toList();
+        if(roster.isEmpty()) {
+            LOG.info("Skill review skipped class={} reason=NO_ATTENDEES",classId);
+            return;
+        }
+        if(roster.size()>MAX_PUPILS) return;
         jdbc.update("""
             INSERT INTO post_lesson_skill_review_jobs
                 (class_id,teacher_id,event_id,roster_json,total_students)
@@ -136,6 +147,38 @@ public class PostLessonSkillReviewService {
             ON CONFLICT(class_id) DO NOTHING
             """,classId,teacherId,room.getEventId(),json.writeValueAsString(roster),roster.size());
         LOG.info("Skill review queued class={} pupils={}",classId,roster.size());
+    }
+
+    /**
+     * Confirm participation from server-owned attendance or authenticated pupil
+     * activity, never from a scheduled group membership or an admission flag.
+     * An admitted pupil who never entered and never worked must not get a review.
+     */
+    boolean participated(UUID classId, UUID studentId) {
+        Boolean present=jdbc.queryForObject("""
+            SELECT
+              EXISTS (
+                SELECT 1 FROM online_class_participants p
+                WHERE p.class_id=? AND p.user_id=? AND p.class_role='STUDENT'
+                  AND p.first_joined_at IS NOT NULL
+              )
+              OR EXISTS (
+                SELECT 1 FROM online_class_annotation_events ev
+                JOIN online_class_annotation_documents doc ON doc.id=ev.document_id
+                WHERE doc.class_id=? AND doc.target_type='WHITEBOARD'
+                  AND doc.target_id IN (?,?)
+                  AND ev.actor_id=? AND ev.layer_owner_id=?
+                  AND ev.operation_type IN ('ADD','UPDATE')
+              )
+              OR EXISTS (
+                SELECT 1 FROM online_class_transcript_segments seg
+                WHERE seg.class_id=? AND seg.user_id=?
+                  AND length(btrim(seg.text))>0
+              )
+            """,Boolean.class,classId,studentId,classId,
+                PersonalBoard.targetIdFor(studentId),PersonalBoard.workbookTargetIdFor(studentId),
+                studentId,studentId,classId,studentId);
+        return Boolean.TRUE.equals(present);
     }
 
     /** Ownership-safe diagnostic; does not leak a different teacher's class. */
@@ -278,7 +321,7 @@ public class PostLessonSkillReviewService {
                 lease_until=now()+INTERVAL '15 minutes',updated_at=now()
             WHERE class_id=(
                 SELECT class_id FROM post_lesson_skill_review_jobs
-                WHERE state='QUEUED' AND created_at < now()-INTERVAL '35 seconds'
+                WHERE state='QUEUED' AND created_at < now()-INTERVAL '5 seconds'
                   AND attempts < ?
                 ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1
             )
