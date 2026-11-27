@@ -29,6 +29,7 @@ function camera(ownerId: string, cameraId = `camera-${ownerId}`): NotebookCamera
 function surface(props: Partial<ComponentProps<typeof StudentWorkspaces>> = {}) {
   return <StudentWorkspaces students={pupils} camerasByOwner={new Map([['p1', camera('p1')], ['p3', camera('p3')]])}
     activeBoard="all-student-boards" overview visible onSelect={vi.fn()} onOverview={vi.fn()}
+    onCheck={async () => ({ checked: 0, skipped: 0, failed: 0 })}
     renderBoard={(id, active, compact, following) => <div data-testid={`board-${id}`}
       data-active={String(active)} data-compact={String(compact)} data-following={String(following)}>Доска {id}</div>}
     renderCameraBoard={(id, active, compact, source, following) => <div data-testid={`camera-board-${id}`}
