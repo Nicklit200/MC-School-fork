@@ -34,8 +34,8 @@ class KolinPageAnalysisServiceTest {
     final KolinBoardReviewService.Metadata metadata=new KolinBoardReviewService.Metadata(pupil.getId(),"Pupil",board,
             2,0,7,now,"a".repeat(64),"task_page",5,List.of(new KolinBoardReviewService.PageMetadata(2,7,"a".repeat(64))));
 
-    KolinPageAnalysisStore.Result receipt(String state,String text) {
-        return new KolinPageAnalysisStore.Result(id,pupil.getId(),board,2,0,3,7,state,text,null,now,now);
+    KolinPageAnalysisStore.SavedResult receipt(String state,String text) {
+        return new KolinPageAnalysisStore.SavedResult(id,pupil.getId(),board,2,0,3,7,state,text,null,now,now,true);
     }
 
     @BeforeEach void setup() {
