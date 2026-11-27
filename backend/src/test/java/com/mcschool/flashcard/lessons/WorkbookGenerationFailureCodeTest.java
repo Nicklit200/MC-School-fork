@@ -18,6 +18,10 @@ class WorkbookGenerationFailureCodeTest {
     void preservesLayoutAndConfigurationDiagnoses() {
         assertEquals("LAYOUT_QA_FAILED", WorkbookGenerationJobService.failureCode(
                 new IllegalArgumentException("Generated PDF failed the mandatory layout check")));
+        assertEquals("LAYOUT_QA_FAILED", WorkbookGenerationJobService.failureCode(
+                new IllegalArgumentException("A4 page packing exhausted")));
+        assertEquals("LAYOUT_QA_FAILED", WorkbookGenerationJobService.failureCode(
+                new IllegalArgumentException("Page 1 is likely to overflow A4 (212 mm > 194 mm)")));
         assertEquals("AI_NOT_CONFIGURED", WorkbookGenerationJobService.failureCode(
                 new IllegalStateException("Server content generation is not configured.")));
     }
