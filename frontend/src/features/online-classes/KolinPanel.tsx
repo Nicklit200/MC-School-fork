@@ -104,7 +104,7 @@ export function KolinPanel({ chat, context, currentStudentName, allStudentsOverv
       {usageFailed && <small>{de ? 'Statistik derzeit nicht verfügbar.' : 'Статистика временно недоступна.'}</small>}
       {usage && <>
         <div className="kolin-usage__totals">
-          <span>{de ? 'Seitenprüfungen' : 'Проверки'}: <b>{usage.totals.checks}</b></span>
+          <span>{de ? 'Prüfungen' : 'Проверки'}: <b>{usage.totals.checks}</b></span>
           <span>{de ? 'Versionen' : 'Версии'}: <b>{usage.totals.uniqueRevisions}</b></span>
           <span>AI: <b>{usage.totals.aiRequests}</b></span>
           <span>{de ? 'Cache' : 'Кэш'}: <b>{usage.totals.cacheHits}</b></span>
@@ -208,7 +208,7 @@ export function KolinPanel({ chat, context, currentStudentName, allStudentsOverv
  + page.costUsd.toFixed(4)}</small>
           </div>)}
         </details>}
-        {!usage.totals.costComplete && <small>{de ? 'Kosten unvollständig: API-Preise müssen konfiguriert werden oder ein Request lieferte keine Token-Nutzung.' : 'Стоимость пока неполная: нужно настроить тарифы API или часть ответов не вернула расход токенов.'}</small>}
+        {!usage.totals.costComplete && <small>{de ? 'Kosten unvollständig: API-Preise konfigurieren oder Token-Nutzung fehlt.' : 'Стоимость пока неполная: нужно настроить тарифы API или часть ответов не вернула расход токенов.'}</small>}
       </>}
     </section>}
     <SavedPageAnalysis classId={chat.classId} studentId={context.studentId} pageNumber={context.currentWorkbookPage} de={de} enabled={automaticPageAnalysisEnabled} />
