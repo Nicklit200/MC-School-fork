@@ -93,7 +93,7 @@ export function PersonalWorkbooksPanel({ eventId, lesson, lessons = [], students
   const value = data?.eventId === eventId ? data.value : null;
   if (!value?.enabled && !lesson) return null;
   const chosen = new Set(roster.map(item => item.studentId));
-  const available = students.filter(item => !chosen.has(item.id));
+  const available = students.filter(item => item.status === 'ACTIVE' && !chosen.has(item.id));
   const transferTargets = lessons.filter(item => item.eventId !== eventId
     && item.startsAt && Date.parse(item.startsAt) > Date.now());
 
@@ -184,7 +184,7 @@ export function PersonalWorkbooksPanel({ eventId, lesson, lessons = [], students
           </select>
           <button type="button" className="btn" disabled={editingRoster || !newStudentId}
             onClick={() => void editParticipants(() => api.lessons.addParticipant(eventId, newStudentId))}>
-            + {de ? 'Schüler hinzufügen' : 'Добавить ученика'}
+            + {de ? 'Einmalig hinzufügen' : 'Добавить на один урок'}
           </button>
         </div>}
       </div>
