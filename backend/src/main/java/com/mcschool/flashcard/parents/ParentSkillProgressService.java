@@ -264,8 +264,8 @@ public class ParentSkillProgressService {
                 items.add(new LessonEvidence(proof.skillId(),
                         names.getOrDefault(proof.skillId(), proof.skillId()),
                         changed ? matched.previous() : null,
-                        proof.after(), proof.autonomy(), proof.explanation(),
-                        proof.excerpt(), origin, changed));
+                        proof.after(), proof.autonomy(), parentFacingText(proof.explanation()),
+                        null, origin, changed));
             }
             String summary = normalizedSummary(session.recapSummary());
             String origin = summary == null ? "NONE" : "AI_TRANSCRIPT_RECAP";
@@ -346,7 +346,7 @@ public class ParentSkillProgressService {
                     proof.sourceType(),proof.sourceRef(),proof.at(),cycleLessonId,
                     matched == null ? null : matched.previous(),
                     proof.after(),matched != null,proof.autonomy(),
-                    proof.explanation(),proof.excerpt()));
+                    parentFacingText(proof.explanation()),null));
         }
         List<LessonProgressPoint> lessonProgress = lessonTimeline(
                 chronologicalLessons, history, proofRows, practice, allowed, names);
@@ -429,7 +429,7 @@ public class ParentSkillProgressService {
                             names.getOrDefault(change.skillId(), change.skillId()),
                             change.previous(), change.current(), change.at(),
                             source == null ? "HISTORY" : source.sourceType(),
-                            explanation, source == null ? null : source.excerpt()));
+                            parentFacingText(explanation), null));
         }
 
         // Replay scores exactly once. Re-reading an older manual edit at
@@ -489,8 +489,7 @@ public class ParentSkillProgressService {
                 if (topic.isEmpty() || !Set.of("PRACTICED","INDEPENDENT","WITH_HELP","DIFFICULTY").contains(kind))
                     continue;
                 results.add(new LessonObservation(topic,kind,
-                        Objects.toString(entry.get("explanation"), ""),
-                        Objects.toString(entry.get("excerpt"), "")));
+                        parentFacingText(Objects.toString(entry.get("explanation"), "")), ""));
             }
             return List.copyOf(results);
         } catch (Exception badRecap) {
@@ -520,9 +519,8 @@ public class ParentSkillProgressService {
                 if(topic.isBlank()||before.isBlank()||after.isBlank()
                         ||!Set.of("BETWEEN_LESSONS","WITHIN_LESSON").contains(mode))continue;
                 result.add(new LessonImprovement(topic,mode,before,after,
-                        Objects.toString(row.get("explanation"),""),
-                        Objects.toString(row.get("beforeQuote"),""),
-                        Objects.toString(row.get("afterQuote"),""),
+                        parentFacingText(Objects.toString(row.get("explanation"),"")),
+                        "", "",
                         Objects.toString(row.get("skillId"),""),
                         scoreValue(row.get("masteryBefore")),
                         scoreValue(row.get("masteryAfter")),
@@ -626,8 +624,28 @@ public class ParentSkillProgressService {
                 .matcher(transcript).find();
     }
 
+    /**
+     * Parent API is a pedagogical view, not an audit console. Keep the learning
+     * explanation while removing internal attribution, IDs and source-verification
+     * sentences. Raw quotes and source locations remain in the staff-only evidence store.
+     */
+    static String parentFacingText(String value) {
+        String raw=Objects.toString(value,"").replaceAll("[\\r\\n\\t]+"," ").strip();
+        if(raw.isEmpty())return "";
+        List<String> sentences=java.util.Arrays.stream(raw.split("(?<=[.!?;])\\s+"))
+                .map(String::strip)
+                .filter(part->!part.isEmpty())
+                .filter(part->!java.util.regex.Pattern.compile(
+                        "(?iu)(?:user\\s*id|user_id|sourceboardid|boardid|transcript|транскрипц\\p{L}*|авторств\\p{L}*|идентификатор(?:ом)?\\s+пользователя|подтвержден\\p{L}*\\s+(?:по|из|на основании)\\s+(?:транскрипц|источник))")
+                        .matcher(part).find())
+                .toList();
+        String safe=String.join(" ",sentences).strip();
+        if(safe.isEmpty())return "На уроке работали над этим навыком. Продолжим закреплять его на следующих занятиях.";
+        return safe.substring(0,Math.min(2200,safe.length()));
+    }
+
     private static String normalizedSummary(String summary) {
-        String safe = Objects.toString(summary,"").replaceAll("[\\r\\n\\t]+"," ").strip();
-        return safe.isEmpty() ? null : safe.substring(0,Math.min(2200,safe.length()));
+        String safe=parentFacingText(summary);
+        return safe.isEmpty()?null:safe;
     }
 }

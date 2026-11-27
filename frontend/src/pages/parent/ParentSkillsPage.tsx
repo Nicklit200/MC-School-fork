@@ -165,13 +165,6 @@ function SelectedLessonSkills({ data, language, lessonId, onOpenSkill }: {
         </span>
       </div>
       <p className="parent-progress__dated-change-explanation">{change.explanation}</p>
-      {change.excerpt && <p className="parent-progress__source">
-        <strong>{say(language,'Основание:','Nachweis:')}</strong> {change.excerpt}
-      </p>}
-      {change.sourceType === 'HISTORY' && <small className="parent-progress__muted">
-        {say(language, 'Источник: история карты навыков; ссылка на работу не сохранена.',
-          'Quelle: Kompetenzverlauf; kein direkter Arbeitsnachweis gespeichert.')}
-      </small>}
       <button type="button" className="parent-progress__open-in-tree"
         onClick={() => onOpenSkill(change.skillId)}>
         {say(language, 'Найти навык в дереве', 'Kompetenz im Baum ansehen')} ↗
@@ -237,15 +230,9 @@ function SelectedLessonSkills({ data, language, lessonId, onOpenSkill }: {
             {say(language, 'Найти навык в дереве', 'Kompetenz im Baum ansehen')} ↗
           </button>}
           {!hasScore && <small className="parent-progress__muted">
-            {say(language, 'Наблюдение подтверждено, но численная оценка навыка пока не обновлена.',
-              'Die Beobachtung ist belegt, aber der Kompetenzwert wurde noch nicht geändert.')}
+            {say(language, 'Навык ещё развивается - продолжим закреплять его на следующих занятиях.',
+              'Die Kompetenz entwickelt sich noch - wir festigen sie in den nächsten Stunden weiter.')}
           </small>}
-          <details className="parent-progress__improvement-proof">
-            <summary>{say(language,'Показать подтверждение из транскрипции',
-              'Belege aus dem Transkript anzeigen')}</summary>
-            <p><strong>{say(language,'Ранее:','Früher:')}</strong> {item.beforeQuote}</p>
-            <p><strong>{say(language,'Позже:','Später:')}</strong> {item.afterQuote}</p>
-          </details>
         </article>;
       })}
     </section>}

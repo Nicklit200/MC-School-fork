@@ -63,7 +63,7 @@ describe('parent curriculum changes per lesson', () => {
       skillId: 'g5-1-7', skillTitle: 'Степени и степени десяти',
       previous: 40, current: 45, changedAt: '2026-11-20T19:01:00Z',
       sourceType: 'LESSON', explanation: 'Самостоятельно вычислены степени.',
-      excerpt: '4 в третьей — это 64',
+      excerpt: 'Авторство этих ответов подтверждено транскрипцией с userId Семёна',
     }]));
     render(<ParentSkillsPage />);
     const point = await screen.findByRole('button', { name: /Индивидуальный урок/ });
@@ -75,6 +75,7 @@ describe('parent curriculum changes per lesson', () => {
     expect(screen.getAllByText('Степени и степени десяти').length).toBeGreaterThan(0);
     expect(screen.getByText('40% → 45%')).toBeInTheDocument();
     expect(screen.getByText('Самостоятельно вычислены степени.')).toBeInTheDocument();
+    expect(screen.queryByText(/userId|транскрипц|Авторство|Основание:/i)).not.toBeInTheDocument();
     expect(screen.queryByText('Разряды и большие числа')).not.toBeInTheDocument();
     expect(screen.queryByText(/6\s*\/\s*9/)).not.toBeInTheDocument();
   });
