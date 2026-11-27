@@ -32,9 +32,9 @@ const futureLesson: GroupLesson = {
 const mountWithRoster = (onChanged = vi.fn(async () => {})) =>
   render(<I18nProvider><PersonalWorkbooksPanel eventId="lesson-1"
     lesson={futureLesson} lessons={[futureLesson]} students={[
-      { id: 'alice', fullName: 'Анна' },
-      { id: 'bob', fullName: 'Борис' },
-      { id: 'sofia', fullName: 'София' },
+      { id: 'alice', fullName: 'Анна', status: 'ACTIVE' },
+      { id: 'bob', fullName: 'Борис', status: 'ACTIVE' },
+      { id: 'sofia', fullName: 'София', status: 'ACTIVE' },
     ] as any} onChanged={onChanged} /></I18nProvider>);
 
 beforeEach(() => {
@@ -77,7 +77,7 @@ describe('personal lesson worksheets', () => {
     mountWithRoster();
     const select = await screen.findByRole('combobox', { name: 'Выбрать ученика для добавления' });
     await userEvent.selectOptions(select, 'sofia');
-    await userEvent.click(screen.getByRole('button', { name: '+ Добавить ученика' }));
+    await userEvent.click(screen.getByRole('button', { name: '+ Добавить на один урок' }));
     await waitFor(() => expect(api.lessons.addParticipant).toHaveBeenCalledWith('lesson-1', 'sofia'));
   });
 
