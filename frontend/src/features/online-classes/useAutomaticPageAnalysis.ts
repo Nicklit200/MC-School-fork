@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
 import { kolinApi, type KolinPageAnalysisCandidate, type KolinBoardSnapshot } from '../../api/kolin';
 
-const POLL_MS = 3000;
-const MAX_LOCAL_SKIPS = 256;
+export interface ManualPageCheckSummary {
+  checked: number;
+  skipped: number;
+  failed: number;
+}
 
 export function matchesAnalysisCandidate(candidate: KolinPageAnalysisCandidate, snapshot: KolinBoardSnapshot): boolean {
   return snapshot.studentId === candidate.studentId && snapshot.boardId === candidate.boardId
@@ -11,13 +14,11 @@ export function matchesAnalysisCandidate(candidate: KolinPageAnalysisCandidate, 
     && snapshot.revision === candidate.revision && snapshot.scope === 'task_page';
 }
 
-/** The server selects quiet, not-yet-analyzed revisions. Capture only one page,
- * without navigating the teacher or pupil viewport. One request in flight per host tab;
- * the durable unique key protects across tabs/replicas. No automatic charge retry. */
+/** Keep the teacher feature gate, but never poll for paid page checks. */
 export function useAutomaticPageAnalysis(classId: string, teacherId: string, enabled: boolean) {
   const scope = JSON.stringify([classId, teacherId]);
   const [permission, setPermission] = useState<{ scope: string; enabled: boolean }>();
-  const automaticPageAnalysisEnabled = enabled && permission?.scope === scope && permission.enabled;
+  const pageAnalysisEnabled = enabled && permission?.scope === scope && permission.enabled;
   useEffect(() => {
     if (!enabled) return;
     let stopped = false;
@@ -28,45 +29,48 @@ export function useAutomaticPageAnalysis(classId: string, teacherId: string, ena
     });
     return () => { stopped = true; };
   }, [classId, scope, enabled]);
-  useEffect(() => {
-    if (!automaticPageAnalysisEnabled) return;
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const skipped = new Set<string>();
-    const schedule = () => { if (!stopped) timer = setTimeout(() => { void run(); }, POLL_MS); };
-    async function run() {
-      try {
-        if (stopped || document.visibilityState === 'hidden') return;
-        const candidates = await kolinApi.pageAnalysisCandidates(classId);
-        if (stopped) return;
-        for (const candidate of candidates) {
-          if (stopped) return;
-          const key = JSON.stringify(candidate);
-          if (skipped.has(key)) continue;
-          try {
-            const { captureBoardPage } = await import('./boardExport');
-            if (stopped) return;
-            const snapshot = await captureBoardPage(classId, candidate.studentId, candidate.boardId,
-              candidate.pageNumber - 1, null, 'task_page', true);
-            if (stopped) return;
-            if (!matchesAnalysisCandidate(candidate, snapshot)) continue;
-            await kolinApi.analyzePage(classId, snapshot);
-            break; // bounded: one paid analysis per polling cycle, sequential.
-          } catch (error) {
-            if (error instanceof Error && (error.message === 'NO_PUPIL_INK' || error.message === 'REVIEW_TOO_LARGE')) {
-              if (skipped.size >= MAX_LOCAL_SKIPS) skipped.delete(skipped.values().next().value!);
-              skipped.add(key);
-              continue;
-            }
-            break; // network/race: re-read metadata, never replay an old snapshot blindly.
-          }
-        }
-      } catch {
-        // A failed optional review cannot interrupt live drawing or audio.
-      } finally { schedule(); }
+  return Boolean(pageAnalysisEnabled);
+}
+
+/** Check only the selected pupil's changed pages. The server returns metadata
+ * for pupil-ink revisions not previously checked; unchanged pages are never
+ * captured or sent to the vision model again. Calls run sequentially per click. */
+export async function checkStudentPages(
+  classId: string,
+  studentId: string,
+  isCurrent: () => boolean = () => true,
+): Promise<ManualPageCheckSummary> {
+  const summary: ManualPageCheckSummary = { checked: 0, skipped: 0, failed: 0 };
+  if (!isCurrent()) return summary;
+  const candidates = await kolinApi.manualPageAnalysisCandidates(classId, studentId);
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    if (!isCurrent()) break;
+    if (candidate.studentId !== studentId) {
+      summary.skipped++;
+      continue;
     }
-    void run();
-    return () => { stopped = true; clearTimeout(timer); };
-  }, [classId, teacherId, automaticPageAnalysisEnabled]);
-  return Boolean(automaticPageAnalysisEnabled);
+    const key = JSON.stringify(candidate);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    try {
+      const { captureBoardPage } = await import('./boardExport');
+      if (!isCurrent()) break;
+      const snapshot = await captureBoardPage(classId, studentId, candidate.boardId,
+        candidate.pageNumber - 1, null, 'task_page', true);
+      if (!isCurrent()) break;
+      if (!matchesAnalysisCandidate(candidate, snapshot)) {
+        summary.skipped++;
+        continue;
+      }
+      const receipt = await kolinApi.analyzePage(classId, snapshot);
+      if (receipt.state === 'READY') summary.checked++;
+      else if (receipt.state === 'RUNNING') summary.skipped++;
+      else summary.failed++;
+    } catch (error) {
+      if (error instanceof Error && error.message === 'NO_PUPIL_INK') summary.skipped++;
+      else summary.failed++;
+    }
+  }
+  return summary;
 }

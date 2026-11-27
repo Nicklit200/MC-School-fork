@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
+import type { ManualPageCheckSummary } from './useAutomaticPageAnalysis';
 import type { NotebookCamera } from '../../api/notebookCameras';
 import { NotebookCameraViewer, type NotebookCameraVideoSource } from '../notebook-camera/NotebookCameraViewer';
 import { personalBoardId } from './boards';
@@ -12,11 +13,13 @@ interface StudentSurfaceProps {
   onOpen: () => void;
   onOverview: () => void;
   showOverview: boolean;
+  onCheck?: () => Promise<ManualPageCheckSummary>;
+  checkDisabled?: boolean;
   renderBoard: (studentId: string, active: boolean, compact: boolean, following: boolean) => ReactNode;
   renderCameraBoard: (studentId: string, active: boolean, compact: boolean, source: NotebookCameraVideoSource | null, following: boolean) => ReactNode;
 }
 
-function StudentSurface({ student, camera, visible, compact, onOpen, onOverview, showOverview, renderBoard, renderCameraBoard }: StudentSurfaceProps) {
+function StudentSurface({ student, camera, visible, compact, onOpen, onOverview, showOverview, onCheck, checkDisabled = false, renderBoard, renderCameraBoard }: StudentSurfaceProps) {
   const [media, setMedia] = useState<{ cameraId: string; available: boolean } | null>(null);
   const [video, setVideo] = useState<{ cameraId: string; source: NotebookCameraVideoSource } | null>(null);
   const [boardVisited, setBoardVisited] = useState(false);
@@ -24,6 +27,31 @@ function StudentSurface({ student, camera, visible, compact, onOpen, onOverview,
   // Follow belongs to the pupil, so opening their tile or switching between
   // paper and camera keeps the choice without changing another pupil's view.
   const [following, setFollowing] = useState(false);
+  const checkFlight = useRef(false);
+  const [checking, setChecking] = useState(false);
+  const [checkStatus, setCheckStatus] = useState('');
+  async function runCheck() {
+    if (!onCheck || checkDisabled || checkFlight.current) return;
+    checkFlight.current = true;
+    setChecking(true);
+    setCheckStatus('');
+    try {
+      const result = await onCheck();
+      if (!result.checked && !result.skipped && !result.failed) {
+        setCheckStatus('Новых листов нет');
+      } else {
+        const parts = ['Проверено: ' + result.checked];
+        if (result.skipped) parts.push('пропущено: ' + result.skipped);
+        if (result.failed) parts.push('ошибок: ' + result.failed);
+        setCheckStatus(parts.join(', '));
+      }
+    } catch {
+      setCheckStatus('Не удалось проверить тетрадь');
+    } finally {
+      checkFlight.current = false;
+      setChecking(false);
+    }
+  }
   const source = camera && video?.cameraId === camera.cameraId ? video.source : null;
   const hasVideo = Boolean(source && camera && media?.cameraId === camera.cameraId && media.available);
   // A hidden viewer continues listening for the phone to start again. Switching
@@ -35,7 +63,13 @@ function StudentSurface({ student, camera, visible, compact, onOpen, onOverview,
   return <section className="student-workspace" hidden={!visible} aria-label={`Работа ученика: ${student.displayName}`}>
     <div className="online-class-room__student-tile-header">
       <strong>{student.displayName}</strong>
-      <span className="student-workspace__kind">{hasVideo ? 'Камера тетради' : 'Доска'}</span>
+      {onCheck && <button type="button" className="student-workspace__check"
+        aria-label={'Проверить тетрадь: ' + student.displayName} aria-busy={checking}
+        disabled={checking || checkDisabled}
+        title={checkStatus || 'Проверить только новые записи ученика'}
+        onClick={() => { void runCheck(); }}>
+        {checking ? 'Проверяется…' : 'Проверить'}
+      </button>}
       <button type="button" className="student-workspace__follow"
         aria-label={`Следовать за учеником: ${student.displayName}`} aria-pressed={following}
         title={following ? 'Вернуться к своему просмотру' : `Следовать за учеником: ${student.displayName}`}
@@ -44,6 +78,7 @@ function StudentSurface({ student, camera, visible, compact, onOpen, onOverview,
       </button>
       {compact ? <button type="button" onClick={onOpen}>Открыть</button>
         : showOverview && <button type="button" onClick={onOverview}>Все ученики</button>}
+      {checkStatus && <span role="status" className="student-workspace__check-status">{checkStatus}</span>}
     </div>
     <div className="student-workspace__content">
       {boardVisited && <div className="student-workspace__board" hidden={hasVideo}>
@@ -79,7 +114,7 @@ function StudentSurface({ student, camera, visible, compact, onOpen, onOverview,
   </section>;
 }
 
-export function StudentWorkspaces({ students, camerasByOwner, activeBoard, overview, visible, onSelect, onOverview, renderBoard, renderCameraBoard }: {
+export function StudentWorkspaces({ students, camerasByOwner, activeBoard, overview, visible, onSelect, onOverview, onCheck, checkDisabled = false, renderBoard, renderCameraBoard }: {
   students: RosterStudent[];
   camerasByOwner: Map<string, NotebookCamera>;
   activeBoard: string;
@@ -87,6 +122,8 @@ export function StudentWorkspaces({ students, camerasByOwner, activeBoard, overv
   visible: boolean;
   onSelect: (boardId: string) => void;
   onOverview: () => void;
+  onCheck?: (studentId: string) => Promise<ManualPageCheckSummary>;
+  checkDisabled?: boolean;
   renderBoard: StudentSurfaceProps['renderBoard'];
   renderCameraBoard: StudentSurfaceProps['renderCameraBoard'];
 }) {
@@ -105,6 +142,7 @@ export function StudentWorkspaces({ students, camerasByOwner, activeBoard, overv
         visible={shown.has(student.userId)} compact={overview}
         onOpen={() => onSelect(personalBoardId(student.userId))}
         onOverview={onOverview} showOverview={students.length > 1}
+        onCheck={onCheck ? () => onCheck(student.userId) : undefined} checkDisabled={checkDisabled}
         renderBoard={renderBoard} renderCameraBoard={renderCameraBoard}
       />)}
     {overview && students.length === 0 && <p className="online-class-room__student-grid-empty">Пока нет учеников</p>}

@@ -43,7 +43,7 @@ import { ParticipantListPanel } from './ParticipantListPanel';
 import { WaitingRoomPanel } from './WaitingRoomPanel';
 import { useAnswersPanel } from './useAnswersPanel';
 import { useKolinChat } from './useKolinChat';
-import { useAutomaticPageAnalysis } from './useAutomaticPageAnalysis';
+import { checkStudentPages, useAutomaticPageAnalysis } from './useAutomaticPageAnalysis';
 import { useKolinBoardReview } from './useKolinBoardReview';
 import { KolinPanel } from './KolinPanel';
 import { DocumentWhiteboardPanel } from './DocumentWhiteboardPanel';
@@ -835,6 +835,10 @@ function RoomBody({
             visible={showStudentWorkspaces}
             onSelect={selectBoard}
             onOverview={() => selectBoard(ALL_STUDENT_BOARDS_ID)}
+             onCheck={automaticPageAnalysisEnabled ? studentId => checkStudentPages(classId, studentId,
+               () => mounted.current && currentArchiveScope.current === archiveScope
+                 && liveConnectionState.current === ConnectionState.Connected) : undefined}
+             checkDisabled={boardsFrozen}
             renderBoard={(studentId, active, compact, following) => <Suspense fallback={null}>
               <DocumentWhiteboardPanel
                 sharedDocument={boardDocument}
