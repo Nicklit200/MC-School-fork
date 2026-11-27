@@ -93,12 +93,23 @@ public class KolinPageAnalysisService {
         var room=access.requireHost(teacher,classId);
         if (!enabledFor(teacher)) return List.of();
         requirePupil(room,studentId);
+
+        // A pupil can have both a legacy personal board and the newer assigned-workbook
+        // board. Keep saved receipts addressable on either board so opening an older
+        // worksheet never makes its previous Kolyn checks look as if they vanished.
         String workbook=PersonalBoard.workbookTargetIdFor(studentId);
         long privateVersion=documents.workbookVersion(teacher,classId,workbook);
-        String board=privateVersion>0?workbook:PersonalBoard.targetIdFor(studentId);
-        long version=privateVersion>0?privateVersion:documents.workbookVersion(teacher,classId,board);
-        long shared=privateVersion>0?0L:documents.workbookVersion(teacher,classId,"board-1");
-        return store.current(classId,teacher.id(),studentId,board,version,shared);
+        String legacyBoard=PersonalBoard.targetIdFor(studentId);
+        long legacyVersion=documents.workbookVersion(teacher,classId,legacyBoard);
+        long sharedVersion=documents.workbookVersion(teacher,classId,"board-1");
+
+        var saved=new java.util.ArrayList<KolinPageAnalysisStore.SavedResult>();
+        if (privateVersion>0) saved.addAll(store.current(classId,teacher.id(),studentId,workbook,privateVersion,0L));
+        saved.addAll(store.current(classId,teacher.id(),studentId,legacyBoard,legacyVersion,sharedVersion));
+        return saved.stream()
+                .sorted(java.util.Comparator.comparingInt(KolinPageAnalysisStore.SavedResult::pageNumber)
+                        .thenComparing(KolinPageAnalysisStore.SavedResult::capturedAt,java.util.Comparator.reverseOrder()))
+                .limit(500).toList();
     }
 
     public List<KolinPageAnalysisStore.Candidate> candidates(AuthenticatedUser teacher, UUID classId) {
