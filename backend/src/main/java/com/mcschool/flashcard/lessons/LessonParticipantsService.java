@@ -2,6 +2,7 @@ package com.mcschool.flashcard.lessons;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.common.ResourceNotFoundException;
+import com.mcschool.flashcard.liveclasses.OnlineClass;
 import com.mcschool.flashcard.liveclasses.OnlineClassRepository;
 import com.mcschool.flashcard.liveclasses.OnlineClassStatus;
 import com.mcschool.flashcard.users.Role;
