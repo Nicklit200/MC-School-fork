@@ -8,7 +8,9 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "check": "tsc --noEmit",
-    "dev:phone": "expo start --dev-client --tunnel"
+    "dev:phone": "expo start --dev-client --tunnel",
+    "build:testflight": "eas build --platform ios --profile production",
+    "submit:testflight": "eas submit --platform ios --profile production"
   },
   "dependencies": {
     "expo": "~58.0.0",
