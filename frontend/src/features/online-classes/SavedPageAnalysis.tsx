@@ -19,7 +19,11 @@ export function useSavedPageAnalyses(classId: string, studentId: string | undefi
         const rows = await kolinApi.savedPageAnalyses(classId, studentId!);
         if (!stopped) setStored({ scope, results: rows.filter(row => row.studentId === studentId && (!boardId || row.boardId === boardId)) });
       } catch {
-        if (!stopped) setStored({ scope, failed: true });
+        // Keep the last successful poll on screen during a temporary network hiccup.
+        // A transient read failure must never erase already saved teacher feedback.
+        if (!stopped) setStored(previous => previous?.scope === scope
+          ? { ...previous, failed: true }
+          : { scope, failed: true });
       } finally {
         if (!stopped) timer = setTimeout(() => { void poll(); }, 3000);
       }
@@ -33,17 +37,34 @@ export function useSavedPageAnalyses(classId: string, studentId: string | undefi
 export function PageAnalysisFeedback({ current, pageNumber, de, inline = false }: {
   current?: AnalysisState; pageNumber: number; de: boolean; inline?: boolean;
 }) {
-  const row = current?.results?.find(result => result.pageNumber === pageNumber);
-  const status = current?.failed ? (de ? 'Analyse nicht verfügbar' : 'Анализ недоступен') :
-    row?.state === 'READY' ? (de ? 'Gespeicherte Prüfung' : 'Сохранённая проверка') :
-    row?.state === 'RUNNING' ? (de ? 'Wird geprüft…' : 'Проверяется…') :
-    row?.state === 'FAILED' ? (de ? 'Prüfung fehlgeschlagen' : 'Не удалось проверить') :
-    de ? 'Warte auf 30 Sekunden Schreibpause' : 'Ожидание 30 секунд бездействия';
-  const content = row?.state === 'READY' && row.text
-      ? <div className="kolin-saved-page__content" tabIndex={inline ? 0 : undefined}><KolinRichText text={row.text} />
-        {row.finishedAt && <small>{new Date(row.finishedAt).toLocaleTimeString(de ? 'de-DE' : 'ru-RU', { hour: '2-digit', minute: '2-digit' })}</small>}</div>
-      : <p>{de ? 'Nur Ergebnisse der aktuellen gespeicherten Seite. Fehlende Analyse bedeutet nicht fehlerfrei.'
-        : 'После новых записей ученика лист проверяется один раз. До появления результата не считаем задание проверенным.'}</p>;
+  const pageRows = (current?.results ?? []).filter(result => result.pageNumber === pageNumber)
+    .sort((a, b) => Date.parse(b.capturedAt) - Date.parse(a.capturedAt));
+  const latest = pageRows[0];
+  const row = pageRows.find(result => result.state === 'READY' && Boolean(result.text));
+  const newerAttempt = latest && latest.id !== row?.id ? latest : undefined;
+  const status = current?.failed
+    ? (de ? 'Verbindung unterbrochen - gespeicherte Prüfung bleibt erhalten' : 'Нет связи - сохранённая проверка сохранена')
+    : newerAttempt?.state === 'RUNNING'
+      ? (de ? 'Neue Version wird geprüft - letzte Prüfung bleibt gespeichert' : 'Проверяется новая версия - предыдущая проверка сохранена')
+      : newerAttempt?.state === 'FAILED'
+        ? (de ? 'Neue Prüfung fehlgeschlagen - letzte Prüfung bleibt gespeichert' : 'Новая проверка не удалась - предыдущая проверка сохранена')
+        : row && !row.isCurrent
+          ? (de ? 'Letzte abgeschlossene Prüfung - Seite wurde inzwischen geändert' : 'Последняя завершённая проверка - после неё страница изменялась')
+          : row
+            ? (de ? 'Gespeicherte Prüfung' : 'Сохранённая проверка')
+            : latest?.state === 'RUNNING'
+              ? (de ? 'Wird geprüft…' : 'Проверяется…')
+              : latest?.state === 'FAILED'
+                ? (de ? 'Prüfung fehlgeschlagen' : 'Не удалось проверить')
+                : de ? 'Warte auf 30 Sekunden Schreibpause' : 'Ожидание 30 секунд бездействия';
+  const content = row?.text
+      ? <div className="kolin-saved-page__content" tabIndex={inline ? 0 : undefined}>
+          {!row.isCurrent && <small>{de ? 'Historischer Stand - neue Schülerantworten sind noch nicht geprüft.' : 'Предыдущая версия - новые записи ученика ещё не проверены.'}</small>}
+          <KolinRichText text={row.text} />
+          {row.finishedAt && <small>{new Date(row.finishedAt).toLocaleTimeString(de ? 'de-DE' : 'ru-RU', { hour: '2-digit', minute: '2-digit' })}</small>}
+        </div>
+      : <p>{de ? 'Noch keine abgeschlossene Prüfung für diese Seite. Fehlende Analyse bedeutet nicht fehlerfrei.'
+        : 'Для этой страницы ещё нет завершённой проверки. Отсутствие результата не означает, что ошибок нет.'}</p>;
   if (inline) return <aside className="kolin-saved-page kolin-saved-page--inline" data-review-page={pageNumber}
     aria-label={de ? `Seitenprüfung · ${pageNumber}` : `Проверка листа · ${pageNumber}`}>
     <header><strong>{de ? 'Seitenprüfung' : 'Проверка листа'} · {pageNumber}</strong><span>Kolyn</span></header>
