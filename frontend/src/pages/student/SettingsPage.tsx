@@ -244,6 +244,12 @@ export function SettingsPage() {
   }
 
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  // v0.1.0 TestFlight adds this query parameter when its WebView opens.
+  // Remember it for internal React Router navigation to the settings page.
+  if (new URLSearchParams(window.location.search).has('mobileRefresh')) {
+    sessionStorage.setItem('mindcrafti.nativeApp','yes');
+  }
+  const nativeApp = sessionStorage.getItem('mindcrafti.nativeApp') === 'yes';
   const standalone = window.matchMedia?.('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
 
   return (
@@ -353,7 +359,7 @@ export function SettingsPage() {
         </div>
       )}
 
-      <div className="panel stack">
+      {!nativeApp && <div className="panel stack">
         <div>
           <h2 style={{ marginTop: 0 }}>{language === 'DE' ? 'Handy-Benachrichtigungen' : 'Уведомления на телефон'}</h2>
           <p className="muted" style={{ marginBottom: 0 }}>
@@ -398,7 +404,7 @@ export function SettingsPage() {
             </button>
           </>
         )}
-      </div>
+      </div>}
 
       {user?.role === 'PARENT' && <ParentNotifications />}
 

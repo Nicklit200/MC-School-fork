@@ -162,7 +162,7 @@ describe('Layout: role designs and server-controlled online classroom navigation
     expect(container.querySelector('.teacher-shell')).not.toBeInTheDocument();
     const nav = screen.getByRole('navigation', { name: 'Основная навигация' });
     expect(within(nav).getAllByRole('link').map(link => link.getAttribute('href'))).toEqual([
-      '/parent', '/parent/settings', '/parent/skills',
+      '/parent', '/parent/skills', '/parent/settings',
     ]);
     expect(within(nav).getByRole('link', { name: 'Настройки' })).toHaveAttribute('aria-current', 'page');
     expect(screen.queryByRole('link', { name: 'Мои карточки' })).not.toBeInTheDocument();

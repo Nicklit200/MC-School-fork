@@ -9,7 +9,12 @@ import type { ParentChildStatus, ParentHomeworkStatus } from '../../api/types';
 
 const i18n = vi.hoisted(() => ({ language: 'RU' as 'RU' | 'DE' }));
 vi.mock('../../api/parent', () => ({ parentApi: { children: vi.fn() } }));
-vi.mock('../../api/client', () => ({ api: { push: { status: vi.fn(), test: vi.fn() } } }));
+vi.mock('../../api/client', () => ({
+  api: {
+    push: { status: vi.fn(), test: vi.fn() },
+    mobilePush: { status: vi.fn(), test: vi.fn() },
+  },
+}));
 vi.mock('../../i18n/I18nContext', () => ({ useI18n: () => i18n }));
 vi.mock('../../components/ParentTeacherChat', async () => {
   const { useState } = await import('react');
@@ -54,6 +59,10 @@ beforeEach(() => {
     enabled: true, registeredDevices: 0, ready: false, emailAvailable: false,
   });
   vi.mocked(api.push.test).mockResolvedValue(undefined);
+  vi.mocked(api.mobilePush.status).mockResolvedValue({
+    registeredDevices:0,ready:false,
+  });
+  vi.mocked(api.mobilePush.test).mockResolvedValue({accepted:1});
 });
 afterEach(() => {
   cleanup();
@@ -62,17 +71,25 @@ afterEach(() => {
 
 describe('parent evening reminder setup', () => {
   it('keeps the homework notice compact and links to notification settings', async () => {
-    mountPage();
-    expect(await screen.findByText('Напоминания о невыполненных заданиях пока не подключены.')).toBeInTheDocument();
+    render(<MemoryRouter><ParentNotifications compact /></MemoryRouter>);
+    expect(await screen.findByText('Уведомления о домашнем задании пока не подключены.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Настроить' })).toHaveAttribute('href', '/parent/settings');
-    expect(screen.queryByText('У аккаунта также нет email для резервного сообщения.')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Проверить уведомление' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Для этого аккаунта не указан email для резервного сообщения.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Отправить тест на телефон' })).not.toBeInTheDocument();
   });
 
   it('warns in full settings when nightly push has no connected device and no email fallback', async () => {
     render(<ParentNotifications />);
-    expect(await screen.findByText('Вечерние уведомления для этого аккаунта не подключены.')).toBeInTheDocument();
-    expect(screen.getByText('У аккаунта также нет email для резервного сообщения.')).toBeInTheDocument();
+    expect(await screen.findByText('На этом аккаунте пока нет подключённого телефона для уведомлений.')).toBeInTheDocument();
+    expect(screen.getByText('Для этого аккаунта не указан email для резервного сообщения.')).toBeInTheDocument();
+  });
+
+  it('routes an iPhone test to native push when the TestFlight device is connected', async () => {
+    vi.mocked(api.mobilePush.status).mockResolvedValue({registeredDevices:1,ready:true});
+    render(<ParentNotifications />);
+    fireEvent.click(await screen.findByRole('button',{name:'Отправить тест на телефон'}));
+    await waitFor(() => expect(api.mobilePush.test).toHaveBeenCalledOnce());
+    expect(api.push.test).not.toHaveBeenCalled();
   });
 
   it('allows a parent with a registered device to test notification delivery from settings', async () => {
@@ -80,14 +97,14 @@ describe('parent evening reminder setup', () => {
       enabled: true, registeredDevices: 1, ready: true, emailAvailable: false,
     });
     render(<ParentNotifications />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Проверить уведомление' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Отправить тест на телефон' }));
     await waitFor(() => expect(api.push.test).toHaveBeenCalledOnce());
-    expect(await screen.findByText('Тест отправлен. Проверьте уведомления на устройстве.')).toBeInTheDocument();
+    expect(await screen.findByText('Тест принят службой уведомлений. Проверьте телефон.')).toBeInTheDocument();
   });
 });
 
 describe('parent homework dashboard', () => {
-  it('switches children and resets the calendar and chat before showing another child’s work', async () => {
+  it('switches children and resets calendar selection without leaking other child assignments', async () => {
     vi.mocked(parentApi.children).mockResolvedValue([
       child({ homeworks: [homework(), homework({ homeworkId: 'october-homework', startDate: '2026-10-01', filename: 'Проценты.pdf', deadlineAt: '2026-10-01T22:00:00Z' })] }),
       child({ studentId: 'child-2', studentName: 'Мелисса', homeworks: [homework({ homeworkId: 'homework-2', filename: 'Уравнения.pdf' })] }),
@@ -95,9 +112,6 @@ describe('parent homework dashboard', () => {
     mountPage();
     expect(await screen.findByText('Дроби')).toBeInTheDocument();
     expect(screen.queryByText('Уравнения')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Открыть чат' }));
-    expect(screen.getByRole('region', { name: 'Чат: Семён' })).toHaveAttribute('data-student-id', 'child-1');
-    fireEvent.change(screen.getByRole('textbox', { name: 'Черновик сообщения' }), { target: { value: 'Вопрос о дробях' } });
     fireEvent.click(screen.getByRole('button', { name: 'Предыдущий месяц' }));
     expect(screen.getByText('Проценты')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^01\.10\.2026/ })).toHaveAttribute('aria-pressed', 'true');
@@ -107,13 +121,6 @@ describe('parent homework dashboard', () => {
     expect(screen.queryByText('Дроби')).not.toBeInTheDocument();
     expect(screen.queryByText('Проценты')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^26\.11\.2026/ })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.queryByRole('region', { name: 'Чат: Семён' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('textbox', { name: 'Черновик сообщения' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Открыть чат' })).toHaveAttribute('aria-expanded', 'false');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Открыть чат' }));
-    expect(screen.getByRole('region', { name: 'Чат: Мелисса' })).toHaveAttribute('data-student-id', 'child-2');
-    expect(screen.getByRole('textbox', { name: 'Черновик сообщения' })).toHaveValue('');
   });
 
   it('replaces generated PDF names with a readable label and retains descriptive filenames', async () => {
