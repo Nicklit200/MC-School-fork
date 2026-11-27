@@ -9,7 +9,7 @@ import { completedLessonApi, lessonPreparationApi } from '../../api/lessonPrepar
 vi.mock('../../auth/AuthContext',()=>({useAuth:()=>({user:{id:'teacher-1',role:'TEACHER'}})}));
 vi.mock('../../api/client',()=>({api:{lessons:{groupLessons:vi.fn(),participants:vi.fn()},students:{list:vi.fn()}},request:vi.fn()}));
 vi.mock('../../api/lessonPreparation',()=>({lessonPreparationApi:{get:vi.fn(),update:vi.fn(),assignHomeworkSeries:vi.fn()},completedLessonApi:{list:vi.fn()}}));
-vi.mock('./PersonalWorkbooksPanel',()=>({PersonalWorkbooksPanel:()=> <div>Мелисса: тетрадь и решения</div>}));
+vi.mock('./PersonalWorkbooksPanel',()=>({PersonalWorkbooksPanel:({lesson,students}:{lesson:{groupId?:string|null}|null;students:Array<{fullName:string}>})=>lesson?<div data-testid="participant-panel" data-group-id={lesson.groupId??''}>{students.map(student=>student.fullName).join(', ')}</div>:null}));
 vi.mock('./GoogleDrivePdfPicker',()=>({GoogleDrivePdfPicker:()=> <button>Google Drive</button>}));
 vi.mock('../../components/LessonHomeworkSeriesPanel',()=>({LessonHomeworkSeriesPanel:()=> <div>Настройки срока и файла</div>}));
 vi.mock('../../features/online-classes/StartOnlineClassButton',()=>({StartOnlineClassButton:()=> <button>Начать онлайн-урок</button>}));
@@ -41,13 +41,18 @@ describe('lesson workspace',()=>{
     fireEvent.click(screen.getByRole('button',{name:'Закрыть'}));
     expect(screen.getByText('Настройки срока и файла')).not.toBeVisible();
   });
-  it('passes the current lesson and active students to one-off participant management',async()=>{
+  it('passes the current lesson and only active students to one-off participant management',async()=>{
     vi.mocked(api.lessons.groupLessons).mockResolvedValue([{eventId:'lesson-1',title:'Дроби',groupName:'Математика',groupId:'group-1',studentId:null,studentName:null,participantStudentIds:['semen'],startsAt:'2099-11-05T14:00:00Z',endsAt:'2099-11-05T15:00:00Z'}] as never);
+    vi.mocked(api.students.list).mockResolvedValue([
+      {id:'vitalina',fullName:'Виталина',status:'ACTIVE'},
+      {id:'inactive',fullName:'Неактивный ученик',status:'INACTIVE'},
+    ] as never);
     mount();
     await screen.findByRole('heading',{name:'Дроби'});
-    expect(await screen.findByText('Ученики этого урока')).toBeInTheDocument();
-    expect(screen.getByRole('combobox',{name:'Выбрать ученика для добавления'})).toBeInTheDocument();
-    expect(screen.getByRole('button',{name:'+ Добавить на один урок'})).toBeDisabled();
+    const panel=await screen.findByTestId('participant-panel');
+    expect(panel).toHaveAttribute('data-group-id','group-1');
+    expect(panel).toHaveTextContent('Виталина');
+    expect(panel).not.toHaveTextContent('Неактивный ученик');
     expect(api.students.list).toHaveBeenCalledTimes(1);
   });
 
