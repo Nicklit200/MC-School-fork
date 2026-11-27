@@ -193,22 +193,24 @@ public class KolinChatService {
         }
     }
 
-    /** Complete, bounded receipts only; pending or omitted pages cannot count as checked. */
-    static boolean includePageAnalyses(Map<String,Object> context,List<KolinPageAnalysisStore.Result> receipts) {
-        var kept=new ArrayList<KolinPageAnalysisStore.Result>();
+    /** Complete, bounded receipts only; preserved historical checks remain usable as history, not as current verdicts. */
+    static boolean includePageAnalyses(Map<String,Object> context,List<KolinPageAnalysisStore.SavedResult> receipts) {
+        var kept=new ArrayList<KolinPageAnalysisStore.SavedResult>();
         int chars=0;
         int ready=0;
+        int historical=0;
         for(var receipt:receipts) {
             if(!"READY".equals(receipt.state()) || receipt.text()==null) continue;
             ready++;
+            if(!receipt.isCurrent()) historical++;
             if(kept.size()>=20 || chars+receipt.text().length()>24000) continue;
             kept.add(receipt); chars+=receipt.text().length();
         }
         if(kept.isEmpty()) return false;
         context.put("savedPageAnalyses",kept);
         context.put("savedPageAnalysisCoverage",Map.of("readyReceipts",ready,"includedReceipts",kept.size(),
-                "pendingOrFailedReceipts",receipts.size()-ready,
-                "limitation","Only listed current revisions were analyzed; other pages may be unreviewed. No new image was examined for this question."));
+                "historicalReceipts",historical,"pendingOrFailedReceipts",receipts.size()-ready,
+                "limitation","Saved historical checks are preserved for reference. They are not verdicts on newer pupil writing. No new image was examined for this question."));
         return true;
     }
 
