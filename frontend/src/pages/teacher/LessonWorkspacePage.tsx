@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import { completedLessonApi, lessonPreparationApi, type CompletedLessonDocument } from '../../api/lessonPreparation';
-import type { GroupLesson, LessonPreparation } from '../../api/types';
+import type { GroupLesson, LessonPreparation, StudentListItem } from '../../api/types';
 import { StartOnlineClassButton } from '../../features/online-classes/StartOnlineClassButton';
 import { TrialInvitationPanel } from './TrialInvitationPanel';
 import { trialInvitationsApi } from '../../api/trialInvitations';
@@ -26,6 +26,8 @@ export function LessonWorkspacePage() {
   const { language, t } = useI18n();
   const de = language === 'DE';
   const [lesson, setLesson] = useState<GroupLesson | null>(null);
+  const [lessons, setLessons] = useState<GroupLesson[]>([]);
+  const [students, setStudents] = useState<StudentListItem[]>([]);
   const [previousTrialInvite, setPreviousTrialInvite] = useState(false);
   const [prep, setPrep] = useState<LessonPreparation | null>(null);
   const [documents, setDocuments] = useState<CompletedLessonDocument[]>([]);
@@ -60,9 +62,22 @@ export function LessonWorkspacePage() {
 
   useEffect(() => {
     const epoch = ++generation.current;
-    setLoading(true); setError(''); setNotice(''); setPrep(null); setLesson(null); setDocuments([]);
-    Promise.all([api.lessons.groupLessons(), lessonPreparationApi.get(eventId), completedLessonApi.list(eventId).catch(() => [] as CompletedLessonDocument[])])
-      .then(([lessons, preparation, docs]) => { if (epoch === generation.current) { setLesson(lessons.find(item => item.eventId === eventId) ?? null); setPrep(preparation); setDocuments(docs); } })
+    setLoading(true); setError(''); setNotice(''); setPrep(null); setLesson(null); setLessons([]); setStudents([]); setDocuments([]);
+    Promise.all([
+      api.lessons.groupLessons(),
+      lessonPreparationApi.get(eventId),
+      completedLessonApi.list(eventId).catch(() => [] as CompletedLessonDocument[]),
+      api.students.list().catch(() => [] as StudentListItem[]),
+    ])
+      .then(([lessonList, preparation, docs, studentList]) => {
+        if (epoch === generation.current) {
+          setLessons(lessonList);
+          setStudents(studentList.filter(student => student.status === 'ACTIVE'));
+          setLesson(lessonList.find(item => item.eventId === eventId) ?? null);
+          setPrep(preparation);
+          setDocuments(docs);
+        }
+      })
       .catch(e => { if (epoch === generation.current) setError(toErrorMessage(e, t)); })
       .finally(() => { if (epoch === generation.current) setLoading(false); });
     return () => { generation.current++; };
@@ -74,6 +89,13 @@ export function LessonWorkspacePage() {
     catch (e) { if (epoch === generation.current) setError(toErrorMessage(e, t)); }
     finally { if (epoch === generation.current) setBusy(false); }
   }
+  async function refreshLessonParticipants() {
+    const participants = await api.lessons.participants(eventId);
+    setLesson(current => current?.eventId === eventId
+      ? { ...current, participantStudentIds: participants.map(item => item.studentId) }
+      : current);
+  }
+
   async function upload(kind: Kind, file: File) {
     const epoch = generation.current;
     await perform(async () => {
@@ -151,7 +173,8 @@ export function LessonWorkspacePage() {
           <div><strong>{de ? 'Arbeitsheft' : 'Рабочая тетрадь'}</strong>{fileControls('workbook')}</div>
           <div><strong title={de ? 'Nur für Lehrkräfte sichtbar' : 'Видно только преподавателю'}>{de ? 'Lösungen' : 'Решения'}</strong>{fileControls('answers')}</div>
         </div>
-      </WorkspaceCard><PersonalWorkbooksPanel eventId={eventId} /></div>
+      </WorkspaceCard><PersonalWorkbooksPanel eventId={eventId} lesson={lesson} lessons={lessons} students={students}
+        onChanged={refreshLessonParticipants} /></div>
     </div>}
     {reportEventId === eventId && <CompletedLessonReportDialog key={eventId} eventId={eventId} title={lesson?.title || ''} de={de} onClose={()=>setReportEventId(null)} />}
     <dialog className="workspace-homework-dialog" ref={documentsDialog}><div className="workspace-dialog-heading"><h2>{de?'Alle Dokumente':'Все документы'}</h2><button type="button" className="teacher-icon-button" aria-label={de?'Schließen':'Закрыть'} onClick={()=>documentsDialog.current?.close()}>×</button></div><div className="workspace-document-list">{documents.length ? documents.map(doc=><button type="button" className="workspace-document" key={doc.id} onClick={()=>void perform(()=>completedLessonApi.open(eventId,doc.id))}>{doc.filename} ↗</button>) : <p className="muted">{de?'Das Dokument wird nach dem Unterricht hinzugefügt.':'Документ добавится после урока.'}</p>}</div></dialog>
