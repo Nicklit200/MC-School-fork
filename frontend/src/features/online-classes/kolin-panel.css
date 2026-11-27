@@ -126,24 +126,27 @@
 }
 
 
-/* In the four-pupil overview, keep the per-page review legible without
-   letting it consume the worksheet tile. The page itself is narrowed by
-   WhiteboardPanel; this only tightens the feedback typography and spacing. */
+/* In the all-pupils overview, the A4 page is anchored in a narrow left column
+   and Kolyn occupies every remaining pixel to its right. */
+.whiteboard--compact-preview.whiteboard--page-reviews .whiteboard__page > .whiteboard__page-surface.whiteboard__stage .whiteboard__surface {
+  left:8px;
+  right:8px;
+}
 .whiteboard--compact-preview.whiteboard--page-reviews .kolin-saved-page--inline {
-  gap:6px;
-  padding:7px;
-  font-size:10px;
+  gap:7px;
+  padding:8px;
+  font-size:11px;
 }
 .whiteboard--compact-preview.whiteboard--page-reviews .kolin-saved-page--inline > header {
   gap:4px;
   padding-bottom:5px;
 }
-.whiteboard--compact-preview.whiteboard--page-reviews .kolin-saved-page--inline > header strong { font-size:10px; }
+.whiteboard--compact-preview.whiteboard--page-reviews .kolin-saved-page--inline > header strong { font-size:11px; }
 .whiteboard--compact-preview.whiteboard--page-reviews .kolin-saved-page--inline > header span,
 .whiteboard--compact-preview.whiteboard--page-reviews .kolin-saved-page__status,
-.whiteboard--compact-preview.whiteboard--page-reviews .kolin-saved-page__content { font-size:10px; }
-.whiteboard--compact-preview.whiteboard--page-reviews .kolin-rich { gap:5px; font-size:10px; line-height:1.4; }
-.whiteboard--compact-preview.whiteboard--page-reviews .kolin-rich__callout { gap:5px; padding:5px; }
+.whiteboard--compact-preview.whiteboard--page-reviews .kolin-saved-page__content { font-size:11px; }
+.whiteboard--compact-preview.whiteboard--page-reviews .kolin-rich { gap:6px; font-size:11px; line-height:1.45; }
+.whiteboard--compact-preview.whiteboard--page-reviews .kolin-rich__callout { gap:6px; padding:6px; }
 
 /* Read-only current page feedback; never covers the writing surface. */
 .kolin-saved-page { flex-shrink:0; min-width:0; border:1px solid var(--v3-edge); border-radius:8px; padding:8px 10px; font-size:12px; overflow-wrap:anywhere; }
