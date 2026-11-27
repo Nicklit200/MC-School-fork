@@ -11,6 +11,7 @@ on:
       - 'backend/src/test/java/com/mcschool/flashcard/liveclasses/Kolin*'
       - 'frontend/src/features/online-classes/**'
       - 'frontend/src/api/kolin.ts'
+      - 'frontend/src/pages/admin/AdminKolinUsagePage*'
       - '.github/workflows/kolyn-page-analysis.yml'
 permissions:
   contents: read
@@ -44,4 +45,4 @@ jobs:
       - working-directory: frontend
         run: npm run typecheck
       - working-directory: frontend
-        run: npm test -- src/features/online-classes/useAutomaticPageAnalysis.test.ts src/features/online-classes/StudentWorkspaces.test.tsx src/features/online-classes/useKolinBoardReview.test.ts src/features/online-classes/useKolinChat.test.ts src/features/online-classes/DocumentWhiteboardPanel.test.tsx src/features/online-classes/KolinRichText.test.tsx src/features/online-classes/KolinPanel.test.tsx
+        run: npm test -- src/features/online-classes/useAutomaticPageAnalysis.test.ts src/features/online-classes/StudentWorkspaces.test.tsx src/features/online-classes/useKolinBoardReview.test.ts src/features/online-classes/useKolinChat.test.ts src/features/online-classes/DocumentWhiteboardPanel.test.tsx src/features/online-classes/KolinRichText.test.tsx src/features/online-classes/KolinPanel.test.tsx src/pages/admin/AdminKolinUsagePage.test.tsx

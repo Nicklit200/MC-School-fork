@@ -117,12 +117,6 @@ public class KolinPageAnalysisService {
         }
     }
 
-    public Map<String,Object> usage(AuthenticatedUser teacher,UUID classId) {
-        access.requireHost(teacher,classId);
-        if(!enabledFor(teacher)) throw KolinRequestException.reviewUnavailable();
-        return Map.of("totals",store.usageTotals(classId,teacher.id()),"pages",store.pageUsage(classId,teacher.id()));
-    }
-
     public List<KolinPageAnalysisStore.SavedResult> current(AuthenticatedUser teacher, UUID classId, UUID studentId) {
         var room=access.requireHost(teacher,classId);
         if (!enabledFor(teacher)) return List.of();

@@ -117,6 +117,7 @@ export function Layout({ children }: { children: ReactNode }) {
             { to: '/teachers', label: language === 'DE' ? 'Lehrer' : 'Учителя' },
             { to: '/admin/accounts', label: language === 'DE' ? 'Konten' : 'Ученики и родители' },
             { to: '/admin/learning-time', label: language === 'DE' ? 'Lernzeit' : 'Время обучения' },
+            { to: '/admin/kolyn-usage', label: language === 'DE' ? 'Kolyn-Statistik' : 'Статистика Kolyn' },
             { to: '/admin/lessons', label: language === 'DE' ? 'Unterricht' : 'Уроки школы' },
             { to: '/admin/trial-lessons', label: language === 'DE' ? 'Probestunden' : 'Пробные уроки' },
             { to: '/admin/leads', label: language === 'DE' ? 'Anfragen' : 'Заявки' },

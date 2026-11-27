@@ -32,6 +32,7 @@ class KolinPageAnalysisStoreIntegrationTest {
     @Autowired OnlineClassAnnotationEventRepository events;
     @Autowired JdbcTemplate jdbc;
     @Autowired KolinPageAnalysisStore store;
+    @Autowired KolinUsageAdminController adminUsage;
     @MockitoBean GoogleCalendarLessonService calendar;
     User teacher,pupil;
     OnlineClass room;
@@ -161,5 +162,26 @@ class KolinPageAnalysisStoreIntegrationTest {
         assertThat(incomplete.costComplete()).isFalse();
         assertThat(incomplete.costUsd()).isEqualByComparingTo("0.0057");
         assertThat(store.usageTotals(room.getId(),UUID.randomUUID()).checks()).isZero();
+        assertThat(store.usageLessons(Instant.now().minusSeconds(86400))).singleElement().satisfies(row -> {
+            assertThat(row.classId()).isEqualTo(room.getId());
+            assertThat(row.teacherName()).isEqualTo("Owner");
+            assertThat(row.aiRequests()).isEqualTo(2);
+            assertThat(row.cacheHits()).isEqualTo(1);
+            assertThat(row.costComplete()).isFalse();
+        });
+    }
+
+    @Test
+    @org.springframework.security.test.context.support.WithMockUser(roles="TEACHER")
+    void teachersCannotReadInternalUsageReports() {
+        assertThatThrownBy(()->adminUsage.lessons(30)).isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+        assertThatThrownBy(()->adminUsage.detail(room.getId(),teacher.getId())).isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+    }
+
+    @Test
+    @org.springframework.security.test.context.support.WithMockUser(roles="ADMIN")
+    void administratorsCanReadInternalUsageReports() {
+        assertThat(adminUsage.lessons(30).getBody()).isEmpty();
+        assertThat(adminUsage.detail(room.getId(),teacher.getId()).getBody()).containsKeys("totals","pages");
     }
 }

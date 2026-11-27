@@ -169,8 +169,6 @@ const base = (classId: string) => `/online-classes/${encodeURIComponent(classId)
 const worksheetPath = (classId: string, id: string) => `${base(classId)}/worksheets/${encodeURIComponent(id)}`;
 
 export const kolinApi = {
-  pageAnalysisUsage: (classId: string) =>
-    request<KolinPageUsageResponse>('GET', `${base(classId)}/page-analyses/usage`),
   pageAnalysisEnabled: (classId: string) =>
     request<{ enabled: boolean }>('GET', `${base(classId)}/page-analyses/enabled`),
   pageAnalysisCandidates: (classId: string) =>
@@ -200,4 +198,27 @@ export const kolinApi = {
   worksheetPreview: (classId: string, id: string) => requestBlob(`${worksheetPath(classId, id)}/preview`),
   worksheetPdf: (classId: string, id: string) => requestBlob(`${worksheetPath(classId, id)}/pdf`),
   appendWorksheet: (classId: string, id: string) => request<KolinWorksheet>('POST', `${worksheetPath(classId, id)}/append`),
+};
+
+/** Internal school accounting. The server requires an ADMIN session. */
+export interface AdminKolinUsageLesson {
+  classId: string;
+  teacherId: string;
+  teacherName: string;
+  title: string;
+  scheduledStartAt: string;
+  checks: number;
+  uniqueRevisions: number;
+  aiRequests: number;
+  aiResponses: number;
+  cacheHits: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number | null;
+  costComplete: boolean;
+}
+export const adminKolinUsageApi = {
+  lessons: (days: number) => request<AdminKolinUsageLesson[]>('GET', '/admin/kolyn-usage?days=' + days),
+  detail: (classId: string, teacherId: string) => request<KolinPageUsageResponse>('GET',
+    '/admin/kolyn-usage/' + encodeURIComponent(classId) + '?teacherId=' + encodeURIComponent(teacherId)),
 };
