@@ -522,7 +522,8 @@ public class PostLessonSkillReviewService {
     static String safeFailureCode(Exception failure) {
         String message = Objects.toString(failure.getMessage(), "");
         if (message.matches("SKILL_REVIEW_AI_(?:HTTP_[0-9]{3}|OUTPUT_LIMIT|INCOMPLETE|EMPTY_RESPONSE|RESPONSE_TOO_LARGE)")
-                || message.equals("SKILL_REVIEW_AI_UNAVAILABLE"))
+                || message.equals("SKILL_REVIEW_AI_UNAVAILABLE")
+                || message.equals("SKILL_REVIEW_TRANSCRIPT_TOO_LONG"))
             return message;
         return "ANALYSIS_OR_STORAGE_FAILED";
     }
