@@ -2,6 +2,7 @@ package com.mcschool.flashcard.lessons;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.common.ResourceNotFoundException;
+import com.mcschool.flashcard.liveclasses.OnlineClass;
 import com.mcschool.flashcard.liveclasses.OnlineClassRepository;
 import com.mcschool.flashcard.liveclasses.OnlineClassStatus;
 import com.mcschool.flashcard.users.Role;
@@ -78,7 +79,7 @@ public class LessonParticipantsService {
     public List<Participant> add(AuthenticatedUser teacher, String eventId, UUID studentId) {
         requireTeacher(teacher);
         requireStudent(teacher.id(), studentId);
-        LessonHistoryEntry lesson = editable(teacher.id(), eventId);
+        LessonHistoryEntry lesson = editableForAdd(teacher.id(), eventId);
         Set<UUID> roster = new LinkedHashSet<>(lesson.toResponse().participantStudentIds());
         if (roster.add(studentId)) {
             lesson.replaceParticipants(new ArrayList<>(roster));
@@ -127,6 +128,28 @@ public class LessonParticipantsService {
         history.save(target);
         log.info("Lesson participant transferred teacher={} student={} from={} to={}",
                 teacher.id(), studentId, sourceEventId, targetEventId);
+    }
+
+    /**
+     * Adding a pupil is safe while the room is open: the occurrence roster is
+     * the live admission source used by OnlineClassAccessService, so the new
+     * pupil can request entry to this same room (and the waiting room still
+     * applies). Removing or transferring a pupil remains restricted to before
+     * the room opens because an already connected LiveKit participant must be
+     * explicitly removed from the media room as well.
+     */
+    private LessonHistoryEntry editableForAdd(UUID teacherId, String eventId) {
+        LessonHistoryEntry lesson = history.findLockedByTeacherIdAndEventId(teacherId, eventId)
+                .orElseThrow(() -> new ResourceNotFoundException("Lesson not found"));
+        OnlineClass room = rooms.findFirstByTeacherIdAndEventIdOrderByCreatedAtDesc(teacherId, eventId)
+                .orElse(null);
+        boolean roomOpen = room != null && room.isConnectable();
+        boolean roomEnded = room != null && room.getStatus() == OnlineClassStatus.ENDED;
+        if (roomEnded || (!Instant.now().isBefore(lesson.getStartsAt()) && !roomOpen)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "A pupil can be added before the lesson starts or while its classroom is open");
+        }
+        return lesson;
     }
 
     private LessonHistoryEntry editable(UUID teacherId, String eventId) {

@@ -25,6 +25,8 @@ export function PersonalWorkbooksPanel({ eventId, lesson, lessons = [], students
   const [editingRoster, setEditingRoster] = useState(false);
   const [rosterError, setRosterError] = useState<string | null>(null);
   const editable = Boolean(lesson?.startsAt && Date.parse(lesson.startsAt) > Date.now());
+  const roomOpen = lesson?.onlineClassStatus === 'LOBBY_OPEN' || lesson?.onlineClassStatus === 'LIVE';
+  const canAddParticipant = editable || roomOpen;
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -56,8 +58,8 @@ export function PersonalWorkbooksPanel({ eventId, lesson, lessons = [], students
     await onChanged?.();
   }
 
-  async function editParticipants(operation: () => Promise<unknown>): Promise<boolean> {
-    if (editingRoster || !editable) return false;
+  async function editParticipants(operation: () => Promise<unknown>, allowOpenRoom = false): Promise<boolean> {
+    if (editingRoster || (!editable && !(allowOpenRoom && roomOpen))) return false;
     setEditingRoster(true);
     setRosterError(null);
     try {
@@ -176,14 +178,14 @@ export function PersonalWorkbooksPanel({ eventId, lesson, lessons = [], students
               : 'Изменения касаются только этого урока, не постоянной группы и других занятий.'}
           </p>
         </div>
-        {editable && rosterLoaded && <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        {canAddParticipant && rosterLoaded && <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <select className="input" value={newStudentId} aria-label={de ? 'Schüler auswählen' : 'Выбрать ученика для добавления'}
             disabled={editingRoster} onChange={event => setNewStudentId(event.target.value)}>
             <option value="">{de ? 'Schüler auswählen…' : 'Выбрать ученика…'}</option>
             {available.map(student => <option key={student.id} value={student.id}>{student.fullName}</option>)}
           </select>
           <button type="button" className="btn" disabled={editingRoster || !newStudentId}
-            onClick={() => void editParticipants(() => api.lessons.addParticipant(eventId, newStudentId))}>
+            onClick={() => void editParticipants(() => api.lessons.addParticipant(eventId, newStudentId), true)}>
             + {de ? 'Einmalig hinzufügen' : 'Добавить на один урок'}
           </button>
         </div>}
