@@ -68,6 +68,30 @@ export interface KolinPageAnalysisCandidate {
   revision: number;
 }
 
+export interface KolinPageUsageRow {
+  studentId: string;
+  studentName: string;
+  boardId: string;
+  pageNumber: number;
+  checks: number;
+  uniqueRevisions: number;
+  aiRequests: number; aiResponses: number;
+  cacheHits: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number | null;
+  costComplete: boolean;
+}
+export interface KolinPageUsageResponse {
+  totals: {
+    checks: number; uniqueRevisions: number; aiRequests: number; aiResponses: number; cacheHits: number;
+    inProgressReuses: number; failedReuses: number; inputTokens: number;
+    cachedInputTokens: number; outputTokens: number; reasoningTokens: number;
+    costUsd: number | null; costComplete: boolean;
+  };
+  pages: KolinPageUsageRow[];
+}
+
 export interface KolinPageAnalysisResult extends KolinPageAnalysisCandidate {
   id: string;
   state: 'RUNNING' | 'READY' | 'FAILED';
@@ -145,6 +169,8 @@ const base = (classId: string) => `/online-classes/${encodeURIComponent(classId)
 const worksheetPath = (classId: string, id: string) => `${base(classId)}/worksheets/${encodeURIComponent(id)}`;
 
 export const kolinApi = {
+  pageAnalysisUsage: (classId: string) =>
+    request<KolinPageUsageResponse>('GET', `${base(classId)}/page-analyses/usage`),
   pageAnalysisEnabled: (classId: string) =>
     request<{ enabled: boolean }>('GET', `${base(classId)}/page-analyses/enabled`),
   pageAnalysisCandidates: (classId: string) =>

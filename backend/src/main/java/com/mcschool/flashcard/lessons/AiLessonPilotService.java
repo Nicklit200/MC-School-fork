@@ -677,6 +677,7 @@ public class AiLessonPilotService {
         }
     }
 
+    public String kolinModelNameForUsage() { return kolinModelName(); }
     private String kolinModelName() { return kolinModel==null || kolinModel.isBlank()?"gpt-6-luna":kolinModel.trim(); }
     private void kolinReasoning(Map<String,Object> payload,String effort) {
         if(kolinModelName().startsWith("gpt-6") || kolinModelName().startsWith("gpt-5")) payload.put("reasoning",Map.of("effort",effort));
@@ -728,7 +729,14 @@ public class AiLessonPilotService {
     public String kolinReviewReply(String lessonContext,List<Map<String,String>> history,String question,String imageDataUrl) {
         return kolinReviewReply(lessonContext,history,question,List.of(Map.of("pageNumber",1,"imageDataUrl",imageDataUrl)));
     }
+    public record KolinModelReply(String text,String model,String responseId,Long inputTokens,
+                                  Long cachedInputTokens,Long outputTokens,Long reasoningTokens) {}
     public String kolinReviewReply(String lessonContext,List<Map<String,String>> history,String question,List<Map<String,Object>> images) {
+        var reply=kolinReviewReplyWithUsage(lessonContext,history,question,images);
+        if(reply.text()==null) throw new IllegalStateException("Invalid or incomplete review");
+        return reply.text();
+    }
+    public KolinModelReply kolinReviewReplyWithUsage(String lessonContext,List<Map<String,String>> history,String question,List<Map<String,Object>> images) {
         if(apiKey.isBlank()) throw new IllegalStateException("Kolyn is not configured");
         var input=new java.util.ArrayList<Map<String,Object>>();
         input.add(Map.of("role","system","content","""
@@ -792,10 +800,16 @@ public class AiLessonPilotService {
         kolinReasoning(payload,"medium");
         try {
             var body=responses(payload,Duration.ofSeconds(90));
-            if(!"completed".equals(body.get("status"))) throw new IllegalStateException("Incomplete review");
             String answer=extractOutputText(body).trim();
-            if(answer.isEmpty() || answer.length()>10000) throw new IllegalStateException("Invalid review");
-            return answer;
+            // An incomplete/invalid review may still incur provider charges. Preserve usage.
+            if(!"completed".equals(body.get("status")) || answer.isEmpty() || answer.length()>10000) answer=null;
+            Map<?,?> usage=body.get("usage") instanceof Map<?,?> map?map:Map.of();
+            Map<?,?> inputDetails=usage.get("input_tokens_details") instanceof Map<?,?> map?map:Map.of();
+            Map<?,?> outputDetails=usage.get("output_tokens_details") instanceof Map<?,?> map?map:Map.of();
+            String responseModel=body.get("model") instanceof String name && !name.isBlank()?name:kolinModelName();
+            return new KolinModelReply(answer,responseModel,body.get("id")==null?null:String.valueOf(body.get("id")),
+                usageLong(usage.get("input_tokens")),usageLong(inputDetails.get("cached_tokens")),
+                usageLong(usage.get("output_tokens")),usageLong(outputDetails.get("reasoning_tokens")));
         } catch(InterruptedException ex) {
             Thread.currentThread().interrupt(); throw new IllegalStateException("Kolyn review interrupted",ex);
         } catch(Exception ex) { throw new IllegalStateException("Kolyn review failed",ex); }
@@ -995,6 +1009,8 @@ public class AiLessonPilotService {
         Map<String, Object> body = objectMapper.readValue(response.body(), Map.class);
         return body;
     }
+
+    private static Long usageLong(Object value) { return value instanceof Number n ? Math.max(0L,n.longValue()) : null; }
 
     private String extractOutputText(Map<String, Object> body) {
         Object direct = body.get("output_text");

@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../../i18n/I18nContext';
-import type { KolinContext, KolinTranscriptContext } from '../../api/kolin';
+import { kolinApi, type KolinContext, type KolinTranscriptContext, type KolinPageUsageResponse } from '../../api/kolin';
 import type { KolinFailureCode, useKolinChat } from './useKolinChat';
 import { KolinWorksheetCard } from './KolinWorksheetCard';
 import { KolinReviewCard } from './KolinReviewCard';
@@ -68,6 +68,28 @@ export function KolinPanel({ chat, context, currentStudentName, allStudentsOverv
   const de = language === 'DE';
   const log = useRef<HTMLOListElement>(null);
   const nearBottom = useRef(true);
+  const [usageState, setUsageState] = useState<{ classId: string; data?: KolinPageUsageResponse; failed?: boolean }>();
+  const [usageRefresh, setUsageRefresh] = useState(0);
+  const usage = usageState?.classId === chat.classId ? usageState.data : undefined;
+  const usageFailed = usageState?.classId === chat.classId && usageState.failed;
+  useEffect(() => {
+    if (!chat.open || !automaticPageAnalysisEnabled) return;
+    let stopped = false;
+    void kolinApi.pageAnalysisUsage(chat.classId).then(data => {
+      if (!stopped) setUsageState({ classId: chat.classId, data });
+    }).catch(() => { if (!stopped) setUsageState({ classId: chat.classId, failed: true }); });
+    return () => { stopped = true; };
+  }, [chat.open, chat.classId, automaticPageAnalysisEnabled, usageRefresh]);
+  const formatCost = (value: number | null, complete: boolean) => value == null
+    ? (de ? 'unbekannt' : 'неизвестно')
+    : (complete ? '' : '≥ ') + '$' + value.toFixed(4);
+  const usageStudents = new Map<string, NonNullable<typeof usage>['pages']>();
+  for (const page of usage?.pages ?? []) {
+    const pages = usageStudents.get(page.studentId) ?? [];
+    pages.push(page);
+    usageStudents.set(page.studentId, pages);
+  }
+
   const input = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     if (chat.open && nearBottom.current && log.current) log.current.scrollTop = log.current.scrollHeight;
@@ -88,6 +110,41 @@ export function KolinPanel({ chat, context, currentStudentName, allStudentsOverv
       <button type="button" className="answers-panel__close" onClick={chat.close}
         aria-label={de ? 'Kolyn schließen' : 'Закрыть Kolyn'}>×</button>
     </header>
+    {automaticPageAnalysisEnabled && <section className="kolin-usage" aria-label={de ? 'Prüfstatistik' : 'Статистика проверок'}>
+      <div className="kolin-usage__totals">
+        <strong>{de ? 'Prüfstatistik' : 'Статистика проверок'}</strong>
+        <button type="button" onClick={() => setUsageRefresh(value => value + 1)}>{de ? 'Aktualisieren' : 'Обновить'}</button>
+      </div>
+      {usageFailed && <small>{de ? 'Statistik derzeit nicht verfügbar.' : 'Статистика временно недоступна.'}</small>}
+      {usage && <>
+        <div className="kolin-usage__totals">
+          <span>{de ? 'Prüfanfragen' : 'Запросы проверки'}: <b>{usage.totals.checks}</b></span>
+          <span>{de ? 'Versionen' : 'Версии'}: <b>{usage.totals.uniqueRevisions}</b></span>
+          <span>{de ? 'KI-Aufrufe' : 'Вызовы ИИ'}: <b>{usage.totals.aiRequests}</b></span>
+          <span>{de ? 'KI-Antworten' : 'Ответы ИИ'}: <b>{usage.totals.aiResponses}</b></span>
+          <span>{de ? 'Cache' : 'Кэш'}: <b>{usage.totals.cacheHits}</b></span>
+          <span>{de ? 'Tokens' : 'Токены'}: <b>{usage.totals.inputTokens + usage.totals.outputTokens}</b></span>
+          <span>{de ? 'Kosten' : 'Стоимость'}: <b>{formatCost(usage.totals.costUsd, usage.totals.costComplete)}</b></span>
+        </div>
+        {usage.pages.length > 0 && <details className="kolin-usage__details">
+          <summary>{de ? 'Nach Schüler und Seite' : 'По ученикам и листам'}</summary>
+          {[...usageStudents.entries()].map(([studentId,pages]) => {
+            const sum = (key: 'checks'|'uniqueRevisions'|'aiRequests'|'aiResponses'|'cacheHits'|'inputTokens'|'outputTokens') => pages.reduce((total,page) => total + page[key],0);
+            const costs = pages.map(page => page.costUsd).filter((value): value is number => value !== null);
+            return <div className="kolin-usage__row" key={studentId}>
+              <strong>{pages[0].studentName}</strong>
+              <small>{de ? 'Anfragen' : 'запросы'} {sum('checks')} · {de ? 'Versionen' : 'версии'} {sum('uniqueRevisions')} · AI {sum('aiRequests')} ({de ? 'Antworten' : 'ответов'} {sum('aiResponses')}) · {de ? 'Cache' : 'кэш'} {sum('cacheHits')} · {formatCost(costs.length ? costs.reduce((a,b) => a+b,0) : null, pages.every(page => page.costComplete))}</small>
+              {pages.map(page => <div className="kolin-usage__row" key={page.boardId + ':' + page.pageNumber}>
+                <span>{de ? 'Seite' : 'Лист'} {page.pageNumber}</span>
+                <small>{de ? 'Anfragen' : 'запросы'} {page.checks} · {de ? 'Versionen' : 'версии'} {page.uniqueRevisions} · AI {page.aiRequests} ({de ? 'Antworten' : 'ответов'} {page.aiResponses}) · {de ? 'Cache' : 'кэш'} {page.cacheHits} · {formatCost(page.costUsd,page.costComplete)}</small>
+              </div>)}
+            </div>;
+          })}
+        </details>}
+        {!usage.totals.costComplete && <small>{de ? 'Kosten unvollständig: Preise oder Token-Daten fehlen.' : 'Стоимость неполная: тарифы API или данные о токенах отсутствуют.'}</small>}
+        <small>{de ? 'Nur erfasste Seitenprüfungen, keine Chat- oder Hausaufgabenkosten.' : 'Только учтённые проверки листов, без чата и генерации домашних заданий.'}</small>
+      </>}
+    </section>}
     <SavedPageAnalysis classId={chat.classId} studentId={context.studentId} pageNumber={context.currentWorkbookPage} de={de} enabled={automaticPageAnalysisEnabled} />
     <ol ref={log} className="kolin-panel__messages" role="log" aria-label={de ? 'Chat mit Kolyn' : 'Переписка с Kolyn'}
       onScroll={() => { const element = log.current; if (element) nearBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80; }}>
