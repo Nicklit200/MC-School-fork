@@ -55,7 +55,8 @@ public class SkillProgressShareService {
 
     public record ShareToken(String token) {}
     public record PublicStudent(String fullName, Integer grade, String schoolType) {}
-    public record PublicHistoryEntry(String skillId, int previousMastery, int mastery, Instant updatedAt) {}
+    public record PublicHistoryEntry(String skillId, int previousMastery, int mastery, Instant updatedAt,
+                                     Instant lessonAt, String lessonTitle, UUID lessonId) {}
     public record PublicProgress(
             String boardId,
             long boardRevision,
@@ -155,16 +156,160 @@ public class SkillProgressShareService {
             target.studentId(), target.boardId()).forEach(entry -> mastery.put(entry.getKey(), entry.getValue()));
 
         List<PublicHistoryEntry> history = jdbc.query("""
-            SELECT skill_id, previous_mastery, mastery, updated_at
-            FROM student_skill_mastery_history
+            SELECT h.skill_id,h.previous_mastery,h.mastery,h.updated_at,
+                   classroom.id AS lesson_id,classroom.title AS lesson_title,
+                   classroom.scheduled_start_at AS lesson_at
+            FROM student_skill_mastery_history h
+            LEFT JOIN LATERAL (
+                SELECT e.source_ref
+                FROM student_skill_evidence e
+                WHERE e.student_id=h.student_id AND e.board_id=h.board_id
+                  AND e.skill_id=h.skill_id AND e.mastery_after=h.mastery
+                  AND e.source_type='LESSON'
+                  AND e.recorded_at BETWEEN h.updated_at-INTERVAL '10 seconds'
+                                        AND h.updated_at+INTERVAL '10 seconds'
+                ORDER BY abs(extract(epoch from e.recorded_at-h.updated_at)),e.id DESC
+                LIMIT 1
+            ) matched ON true
+            LEFT JOIN online_classes classroom ON classroom.id =
+                CASE WHEN substring(matched.source_ref from 1 for 36) ~*
+                    '^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}
+
+        Instant updatedAt = jdbc.query("""
+            SELECT max(updated_at)
+            FROM student_skill_mastery
             WHERE student_id = ? AND board_id = ?
-            ORDER BY updated_at DESC, id DESC
+            """, rs -> rs.next() && rs.getTimestamp(1) != null ? rs.getTimestamp(1).toInstant() : null,
+            target.studentId(), target.boardId());
+
+        List<SkillBoardService.Node> relevant = relevantSkills(board.data(), student.getSchoolType());
+        int totalSkills = relevant.size();
+        int assessedSkills = (int) relevant.stream().filter(node -> mastery.containsKey(node.id())).count();
+        int overallPercent = totalSkills == 0 ? 0 : (int) Math.round(
+                relevant.stream().mapToInt(node -> clamp(mastery.getOrDefault(node.id(), 0))).average().orElse(0));
+
+        return new PublicProgress(
+                board.id(),
+                board.revision(),
+                board.updatedAt(),
+                board.data(),
+                new PublicStudent(student.getFullName(), student.getGrade(), student.getSchoolType()),
+                Map.copyOf(mastery),
+                List.copyOf(history),
+                overallPercent,
+                assessedSkills,
+                totalSkills,
+                updatedAt);
+    }
+
+    private List<SkillBoardService.Node> relevantSkills(SkillBoardService.Board board, String schoolType) {
+        List<SkillBoardService.Node> skills = board.nodes().stream()
+                .filter(node -> node.kind().equals("skill") && !node.archived())
+                .toList();
+        boolean configured = skills.stream().anyMatch(node ->
+                Boolean.TRUE.equals(node.core())
+                        || (node.schoolTypes() != null && !node.schoolTypes().isEmpty()));
+        if (!configured) return skills;
+
+        List<SkillBoardService.Node> relevant = new ArrayList<>();
+        for (SkillBoardService.Node node : skills) {
+            boolean core = Boolean.TRUE.equals(node.core());
+            boolean school = schoolType != null
+                    && node.schoolTypes() != null
+                    && node.schoolTypes().contains(schoolType);
+            if (core || school) relevant.add(node);
+        }
+        return relevant.isEmpty() ? skills : relevant;
+    }
+
+    private User requireVisibleStudent(AuthenticatedUser caller, UUID studentId) {
+        if (caller == null || caller.id() == null
+                || (caller.role() != Role.ADMIN && caller.role() != Role.TEACHER))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Нужен вход администратора или преподавателя");
+        User student = users.findById(studentId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Ученик не найден"));
+        if (student.getRole() != Role.STUDENT || student.isArchived())
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Ученик не найден");
+        if (caller.role() == Role.TEACHER
+                && (student.getTeacher() == null || !caller.id().equals(student.getTeacher().getId())))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Этот ученик относится к другому преподавателю");
+        return student;
+    }
+
+    private String token(UUID shareId, long version) {
+        String payload = shareId + "\n" + version;
+        String encoded = Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(payload.getBytes(StandardCharsets.UTF_8));
+        String signature = Base64.getUrlEncoder().withoutPadding().encodeToString(hmac(signingKey, payload));
+        return encoded + "." + signature;
+    }
+
+    private Decoded decode(String token) {
+        if (token == null || token.length() < 20 || token.length() > 512) throw notFound();
+        String[] parts = token.split("\\.", -1);
+        if (parts.length != 2 || !parts[0].matches("[A-Za-z0-9_-]+") || !parts[1].matches("[A-Za-z0-9_-]{43}"))
+            throw notFound();
+        String payload;
+        try {
+            payload = new String(Base64.getUrlDecoder().decode(parts[0]), StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException ex) {
+            throw notFound();
+        }
+        String expected = Base64.getUrlEncoder().withoutPadding().encodeToString(hmac(signingKey, payload));
+        if (!MessageDigest.isEqual(expected.getBytes(StandardCharsets.US_ASCII),
+                parts[1].getBytes(StandardCharsets.US_ASCII))) throw notFound();
+        String[] fields = payload.split("\\n", -1);
+        if (fields.length != 2) throw notFound();
+        try {
+            UUID shareId = UUID.fromString(fields[0]);
+            long version = Long.parseLong(fields[1]);
+            if (version < 1) throw notFound();
+            return new Decoded(shareId, version);
+        } catch (IllegalArgumentException ex) {
+            throw notFound();
+        }
+    }
+
+    private void requireSigning() {
+        if (signingKey == null)
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Публичные ссылки прогресса недоступны: безопасный ключ подписи не настроен");
+    }
+
+    private static int clamp(int value) {
+        return Math.max(0, Math.min(100, value));
+    }
+
+    private static byte[] hmac(byte[] key, String payload) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(key, "HmacSHA256"));
+            return mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
+        } catch (GeneralSecurityException ex) {
+            throw new IllegalStateException("Could not sign skill progress share token", ex);
+        }
+    }
+
+    private static ResponseStatusException notFound() {
+        return new ResponseStatusException(HttpStatus.NOT_FOUND, "Ссылка на прогресс недействительна");
+    }
+
+    private record ShareRow(UUID id, long version, boolean enabled) {}
+    private record ShareTarget(UUID studentId, String boardId, boolean enabled) {}
+    private record Decoded(UUID shareId, long version) {}
+}
+
+                    THEN substring(matched.source_ref from 1 for 36)::uuid
+                    ELSE NULL END
+            WHERE h.student_id=? AND h.board_id=?
+            ORDER BY h.updated_at DESC,h.id DESC
             LIMIT 500
             """, (rs, rowNum) -> new PublicHistoryEntry(
                 rs.getString("skill_id"),
-                rs.getInt("previous_mastery"),
-                rs.getInt("mastery"),
-                rs.getTimestamp("updated_at").toInstant()),
+                rs.getInt("previous_mastery"),rs.getInt("mastery"),
+                rs.getTimestamp("updated_at").toInstant(),
+                rs.getTimestamp("lesson_at")==null?null:rs.getTimestamp("lesson_at").toInstant(),
+                rs.getString("lesson_title"),rs.getObject("lesson_id",UUID.class)),
             target.studentId(), target.boardId());
 
         Instant updatedAt = jdbc.query("""
