@@ -120,6 +120,67 @@ class PostLessonSkillReviewTest {
     }
 
     @Test
+    void longTranscriptsPreserveEveryAnswerWithoutSilentInitialWindowTruncation() {
+        String line="STUDENT [t=123s]: Я решил -2 умножить на -2 и получил 4.\\n";
+        String transcript=line.repeat(900)+"STUDENT [t=5376s]: END_OF_LESSON_ANSWER\\n";
+        assertThat(transcript.length()).isGreaterThan(18000);
+        assertThat(PostLessonSkillAnalysisService.transcriptChunks(transcript))
+                .hasSize(1).first().asString().contains("END_OF_LESSON_ANSWER");
+    }
+
+    @Test
+    void oversizedTranscriptsSplitAtSpeakerLinesAndDoNotDropLateEvidence() {
+        String line="STUDENT [t=123s]: A verified, chronological math solution.\\n";
+        String transcript=line.repeat(2600)+"STUDENT [t=9899s]: LATE_VERIFIED_ANSWER\\n";
+        var chunks=PostLessonSkillAnalysisService.transcriptChunks(transcript);
+        assertThat(chunks).hasSizeGreaterThan(1);
+        assertThat(String.join("",chunks)).isEqualTo(transcript);
+        assertThat(chunks.get(chunks.size()-1)).contains("LATE_VERIFIED_ANSWER");
+        assertThat(chunks).allMatch(chunk->chunk.length()<=
+                PostLessonSkillAnalysisService.MAX_TRANSCRIPT_CHUNK_CHARS);
+        assertThatThrownBy(()->PostLessonSkillAnalysisService.transcriptChunks(line.repeat(4200)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("SKILL_REVIEW_TRANSCRIPT_TOO_LONG");
+    }
+
+    @Test
+    void earlyHelpAndLaterSingleIndependentAnswerAreSavedWithoutDoubleCounting() {
+        var first=new PostLessonSkillAnalysisService.Observation(
+                "g5-2-4","AFTER_EXPLANATION","CORRECT","STUDENT_SPEECH",0,95,
+                "Разобрал пример только после объяснения преподавателя",
+                "[t=10s] Верно, минус пять","",0);
+        var last=new PostLessonSkillAnalysisService.Observation(
+                "g5-2-4","INDEPENDENT","CORRECT","STUDENT_SPEECH",1,98,
+                "Позже самостоятельно решил другой пример",
+                "[t=3500s] 30 плюс минус 24 будет шесть","",0);
+        var merged=PostLessonSkillAnalysisService.consolidateStages(List.of(
+                new PostLessonSkillAnalysisService.AnalysisResult(List.of(first),"Сначала требовалась помощь."),
+                new PostLessonSkillAnalysisService.AnalysisResult(List.of(last),"Позже ответил верно.")));
+        assertThat(merged.observations()).hasSize(1);
+        var result=merged.observations().get(0);
+        assertThat(result.correctExamples()).isEqualTo(1);
+        assertThat(result.explanation()).contains("Ранее:","Позже:");
+        assertThat(merged.lessonSummary()).contains("Сначала","Позже");
+        assertThat(PostLessonSkillReviewService.masteryAfter(45,result)).isNull();
+    }
+
+    @Test
+    void laterWrongAnswerIsNotOverriddenByEarlierCorrectOne() {
+        var first=new PostLessonSkillAnalysisService.Observation(
+                "g5-2-4","INDEPENDENT","CORRECT","STUDENT_SPEECH",2,96,
+                "Два независимо выполненных ранних примера","[t=10s] -5","",0);
+        var last=new PostLessonSkillAnalysisService.Observation(
+                "g5-2-4","NOT_YET","INCORRECT","STUDENT_SPEECH",0,97,
+                "Позже перепутал правило сложения и умножения",
+                "[t=2000s] Минус на минус это плюс","",0);
+        var merged=PostLessonSkillAnalysisService.consolidateStages(List.of(
+                new PostLessonSkillAnalysisService.AnalysisResult(List.of(first),""),
+                new PostLessonSkillAnalysisService.AnalysisResult(List.of(last),"")));
+        assertThat(PostLessonSkillReviewService.masteryAfter(45,merged.observations().get(0))).isNull();
+        assertThat(merged.observations().get(0).correctness()).isEqualTo("INCORRECT");
+    }
+
+    @Test
     void workerPersistsOnlyBoundedFailureIdentifiers() {
         assertThat(PostLessonSkillReviewService.safeFailureCode(
                 new IllegalStateException("SKILL_REVIEW_AI_OUTPUT_LIMIT")))
@@ -130,6 +191,9 @@ class PostLessonSkillReviewTest {
         assertThat(PostLessonSkillReviewService.safeFailureCode(
                 new IllegalStateException("SKILL_REVIEW_AI_HTTP_401")))
                 .isEqualTo("SKILL_REVIEW_AI_HTTP_401");
+        assertThat(PostLessonSkillReviewService.safeFailureCode(
+                new IllegalStateException("SKILL_REVIEW_TRANSCRIPT_TOO_LONG")))
+                .isEqualTo("SKILL_REVIEW_TRANSCRIPT_TOO_LONG");
         assertThat(PostLessonSkillReviewService.safeFailureCode(
                 new IllegalStateException("Secret transcript data")))
                 .isEqualTo("ANALYSIS_OR_STORAGE_FAILED");
