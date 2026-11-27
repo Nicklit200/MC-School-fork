@@ -78,7 +78,10 @@ public class PostLessonSkillAnalysisService {
                 attributedTranscript, personalAnnotatedPdfs, pupilWrittenPages, teacherFocus).observations();
     }
 
-    /** One provider call produces both verified evidence and a pupil-safe recap. */
+    /** Full pupil transcript like the paged MCH3 workflow; no initial 18k cut. */
+    static final int MAX_TRANSCRIPT_CHUNK_CHARS = 65_000;
+    static final int MAX_TRANSCRIPT_CHUNKS = 3;
+
     public AnalysisResult analyzeWithSummary(String pupil, Integer grade, String schoolType,
             List<SkillBoardService.Node> allowedSkills, String teacherContext,
             String attributedTranscript, List<SourcePdf> personalAnnotatedPdfs,
@@ -88,7 +91,71 @@ public class PostLessonSkillAnalysisService {
         if (!configured()) throw new IllegalStateException("SKILL_REVIEW_AI_UNAVAILABLE");
         if (allowedSkills.isEmpty() || (attributedTranscript.isBlank() && personalAnnotatedPdfs.isEmpty()))
             return new AnalysisResult(List.of(), "");
+        List<String> windows=transcriptChunks(attributedTranscript);
+        List<AnalysisResult> stages=new ArrayList<>();
+        for(int i=0;i<windows.size();i++) {
+            // Do not send large annotated PDFs repeatedly for speech-only windows.
+            stages.add(analyzeWindow(pupil,grade,schoolType,allowedSkills,teacherContext,
+                    windows.get(i),i==0?personalAnnotatedPdfs:List.of(),
+                    i==0?pupilWrittenPages:Set.of(),teacherFocus,i+1,windows.size()));
+        }
+        return consolidateStages(stages);
+    }
 
+    /** Lossless speaker-line windowing. Oversized sources fail; they never silently truncate. */
+    static List<String> transcriptChunks(String transcript) {
+        if(transcript==null || transcript.isBlank())return List.of("");
+        if(transcript.length()<=MAX_TRANSCRIPT_CHUNK_CHARS)return List.of(transcript);
+        List<String> windows=new ArrayList<>();
+        StringBuilder current=new StringBuilder();
+        for(String line:transcript.split("(?<=\\n)",-1)) {
+            if(line.length()>MAX_TRANSCRIPT_CHUNK_CHARS)
+                throw new IllegalStateException("SKILL_REVIEW_TRANSCRIPT_TOO_LONG");
+            if(current.length()>0 && current.length()+line.length()>MAX_TRANSCRIPT_CHUNK_CHARS) {
+                windows.add(current.toString());
+                current.setLength(0);
+            }
+            current.append(line);
+        }
+        if(!current.isEmpty())windows.add(current.toString());
+        if(windows.size()>MAX_TRANSCRIPT_CHUNKS)
+            throw new IllegalStateException("SKILL_REVIEW_TRANSCRIPT_TOO_LONG");
+        return List.copyOf(windows);
+    }
+
+    /**
+     * Compare early and late evidence without adding examples across overlapping
+     * windows or letting an earlier correct answer hide later mistakes.
+     */
+    static AnalysisResult consolidateStages(List<AnalysisResult> stages) {
+        Map<String,Observation> perSkill=new LinkedHashMap<>();
+        StringBuilder summary=new StringBuilder();
+        for(AnalysisResult stage:stages) {
+            if(stage.lessonSummary()!=null && !stage.lessonSummary().isBlank()) {
+                if(!summary.isEmpty())summary.append(" ");
+                summary.append(stage.lessonSummary().strip());
+            }
+            for(Observation current:stage.observations()) {
+                Observation earlier=perSkill.remove(current.skillId());
+                if(earlier!=null)
+                    current=new Observation(current.skillId(),current.autonomy(),
+                            current.correctness(),current.origin(),current.correctExamples(),
+                            current.confidence(),trim("Ранее: "+earlier.explanation()+
+                            " Позже: "+current.explanation(),1200),current.excerpt(),
+                            current.sourceBoardId(),current.pageNumber());
+                perSkill.put(current.skillId(),current);
+            }
+        }
+        List<Observation> finalRows=new ArrayList<>(perSkill.values());
+        if(finalRows.size()>8)finalRows=finalRows.subList(finalRows.size()-8,finalRows.size());
+        return new AnalysisResult(List.copyOf(finalRows),trim(summary.toString(),450));
+    }
+
+    private AnalysisResult analyzeWindow(String pupil, Integer grade, String schoolType,
+            List<SkillBoardService.Node> allowedSkills, String teacherContext,
+            String attributedTranscript, List<SourcePdf> personalAnnotatedPdfs,
+            Set<String> pupilWrittenPages, String teacherFocus,
+            int windowNumber,int totalWindows) throws Exception {
         StringBuilder catalog = new StringBuilder();
         for (var node : allowedSkills.stream().limit(160).toList()) {
             String description = Objects.toString(node.description(), "");
@@ -101,8 +168,9 @@ public class PostLessonSkillAnalysisService {
                 + Objects.toString(schoolType, "") + "\n"
                 + "Lesson context (TOPICS ONLY, never evidence of pupil mastery):\n"
                 + trim(teacherContext, 4000) + "\n"
-                + "VERIFIED-SPEAKER TRANSCRIPT (teacher and this pupil only):\n"
-                + trim(attributedTranscript, 18000) + "\n"
+                + "VERIFIED-SPEAKER TRANSCRIPT, chronological window " + windowNumber + "/" + totalWindows
+                + " (teacher and this pupil only; read to the final line):\n"
+                + attributedTranscript + "\n"
                 + "Allowed SKILL IDs:\n" + catalog
                 + "Personal PDFs, if attached, contain the pupil's worksheet PLUS saved handwriting. "
                 + "An untouched printed exercise is NOT proof it was solved. "
