@@ -112,7 +112,10 @@ class KolinPageAnalysisStoreIntegrationTest {
         assertThat(next.acquired()).isTrue();
         assertThat(next.result().id()).isNotEqualTo(first.result().id());
         store.finish(key(),next.result().id(),"❌ Incorrect");
-        assertThat(current()).extracting(KolinPageAnalysisStore.SavedResult::text).containsExactly("❌ Incorrect");
+        assertThat(current()).extracting(KolinPageAnalysisStore.SavedResult::text)
+                .containsExactly("❌ Incorrect","✅ Correct");
+        assertThat(current()).filteredOn(KolinPageAnalysisStore.SavedResult::isCurrent)
+                .extracting(KolinPageAnalysisStore.SavedResult::text).containsExactly("❌ Incorrect");
 
         write(pupil,pupil,AnnotationOperationType.CLEAR_LAYER,60);
         assertThat(current()).hasSize(2);
