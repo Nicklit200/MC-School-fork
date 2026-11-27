@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../../i18n/I18nContext';
-import type { KolinContext, KolinTranscriptContext } from '../../api/kolin';
+import { kolinApi, type KolinContext, type KolinTranscriptContext, type KolinPageUsageResponse } from '../../api/kolin';
 import type { KolinFailureCode, useKolinChat } from './useKolinChat';
 import { KolinWorksheetCard } from './KolinWorksheetCard';
 import { KolinReviewCard } from './KolinReviewCard';
@@ -68,6 +68,17 @@ export function KolinPanel({ chat, context, currentStudentName, allStudentsOverv
   const de = language === 'DE';
   const log = useRef<HTMLOListElement>(null);
   const nearBottom = useRef(true);
+  const [usage, setUsage] = useState<KolinPageUsageResponse>();
+  const [usageFailed, setUsageFailed] = useState(false);
+  useEffect(() => {
+    if (!chat.open || !automaticPageAnalysisEnabled) return;
+    let stopped = false;
+    void kolinApi.pageAnalysisUsage(chat.classId).then(value => {
+      if (!stopped) { setUsage(value); setUsageFailed(false); }
+    }).catch(() => { if (!stopped) setUsageFailed(true); });
+    return () => { stopped = true; };
+  }, [chat.open, chat.classId, automaticPageAnalysisEnabled]);
+
   const input = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     if (chat.open && nearBottom.current && log.current) log.current.scrollTop = log.current.scrollHeight;
@@ -88,6 +99,118 @@ export function KolinPanel({ chat, context, currentStudentName, allStudentsOverv
       <button type="button" className="answers-panel__close" onClick={chat.close}
         aria-label={de ? 'Kolyn schließen' : 'Закрыть Kolyn'}>×</button>
     </header>
+    {automaticPageAnalysisEnabled && <section className="kolin-usage" aria-label={de ? 'Prüfstatistik' : 'Статистика проверок'}>
+      <strong>{de ? 'Prüfstatistik' : 'Статистика проверок'}</strong>
+      {usageFailed && <small>{de ? 'Statistik derzeit nicht verfügbar.' : 'Статистика временно недоступна.'}</small>}
+      {usage && <>
+        <div className="kolin-usage__totals">
+          <span>{de ? 'Seitenprüfungen' : 'Проверки'}: <b>{usage.totals.checks}</b></span>
+          <span>{de ? 'Versionen' : 'Версии'}: <b>{usage.totals.uniqueRevisions}</b></span>
+          <span>AI: <b>{usage.totals.aiRequests}</b></span>
+          <span>{de ? 'Cache' : 'Кэш'}: <b>{usage.totals.cacheHits}</b></span>
+          <span>{de ? 'Tokens' : 'Токены'}: <b>{usage.totals.inputTokens + usage.totals.outputTokens}</b></span>
+          <span>{de ? 'Kosten' : 'Стоимость'}: <b>{usage.totals.costUsd == null ? (de ? 'Preis nicht gesetzt' : 'тариф не задан') : ' studentId={context.studentId} pageNumber={context.currentWorkbookPage} de={de} enabled={automaticPageAnalysisEnabled} />
+    <ol ref={log} className="kolin-panel__messages" role="log" aria-label={de ? 'Chat mit Kolyn' : 'Переписка с Kolyn'}
+      onScroll={() => { const element = log.current; if (element) nearBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80; }}>
+      {!chat.messages.length && <li className="kolin-panel__welcome">{de
+        ? 'Ich bin Kolyn. Ich helfe beim Erklären, beim Besprechen von Lösungen und beim Vorbereiten von Aufgaben.'
+        : 'Я Kolyn. Помогу объяснить тему, разобрать решение и подготовить задания.'}
+        <p>{automaticPageAnalysisEnabled
+          ? de ? 'Ich nutze gespeicherte Seitenanalysen und das Transkript. Noch nicht geprüfte Seiten kennzeichne ich.'
+            : 'Использую сохранённые проверки листов и расшифровку урока. Непроверенные листы отмечаю отдельно.'
+          : de ? 'Bei Ihrer Frage nutze ich das gespeicherte Transkript dieses Unterrichts. Ich gebe keine automatischen Hinweise.'
+            : 'Когда вы задаёте вопрос, я использую сохранённую расшифровку этого урока. Автоматических подсказок нет.'}</p>
+        <p>{de ? 'Zum Beispiel: Prüfe Melissas Aufgaben 7 und 8. Ich suche auf ihren gespeicherten Heftseiten.'
+          : 'Например: «Проверь задания 7 и 8 у Мелиссы». Найду их на сохранённых страницах её тетради.'}</p></li>}
+      {chat.messages.map(message => <li key={message.id} className={`kolin-panel__message kolin-panel__message--${message.role}`}
+        data-role={message.role} data-message-type={message.type}>
+        <span className="kolin-panel__speaker">{message.role === 'assistant' ? 'Kolyn' : de ? 'Sie' : 'Вы'}</span>
+        {message.text && (message.role === 'assistant' ? <KolinRichText text={message.text} /> : <p>{message.text}</p>)}
+        {message.role === 'assistant' && message.boardContext && <KolinReviewCard context={message.boardContext} preview={message.boardPreview} pages={message.boardPreviews} de={de} />}
+        {message.role === 'assistant' && (message.materials ?? (message.worksheet ? [message.worksheet] : [])).map(worksheet =>
+          <KolinWorksheetCard key={worksheet.id} classId={chat.classId} worksheet={worksheet}
+            appendStatus={message.materials ? message.materialAppendStatus?.[worksheet.id] : message.appendStatus} de={de}
+            onAdd={() => void chat.appendWorksheet(worksheet.id)} />)}
+        {message.role === 'assistant' && message.transcriptContext && <TranscriptContextNote context={message.transcriptContext} de={de} />}
+      </li>)}
+    </ol>
+    {chat.pending && <p className="kolin-panel__status" role="status">{de ? 'Kolyn denkt nach…' : 'Kolyn думает…'}</p>}
+    {chat.availability === 'checking' && <p className="kolin-panel__status" role="status">{de ? 'Kolyn wird verbunden…' : 'Подключаем Kolyn…'}</p>}
+    {chat.availability === 'unconfigured' && <p className="kolin-panel__status" role="status">{de ? 'Kolyn ist noch nicht verfügbar.' : 'Kolyn пока недоступен.'}</p>}
+    {chat.error && <div className="kolin-panel__error" role="alert">
+      <p>{failureMessage(chat.failureCode, de)}</p>
+      <button type="button" onClick={() => void chat.retry()} disabled={chat.pending || chat.availability === 'checking'}>
+        {de ? 'Erneut senden' : 'Повторить отправку'}
+      </button>
+    </div>}
+    <form className="kolin-panel__form" onSubmit={event => { event.preventDefault(); send(); }}>
+      <textarea ref={input} value={chat.draft} onChange={event => chat.setDraft(event.target.value)} rows={2} maxLength={2000}
+        aria-label={de ? 'An Kolyn schreiben…' : 'Напишите Kolyn…'} placeholder={de ? 'An Kolyn schreiben…' : 'Напишите Kolyn…'}
+        disabled={chat.pending} onKeyDown={event => {
+          if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); send(); }
+          event.stopPropagation();
+        }} />
+      <button type="submit" disabled={chat.pending || chat.availability !== 'ready' || !chat.draft.trim()}>{de ? 'Senden' : 'Отправить'}</button>
+    </form>
+  </aside>;
+}
+ + usage.totals.costUsd.toFixed(4)}</b></span>
+        </div>
+        {usage.pages.length > 0 && <details className="kolin-usage__details">
+          <summary>{de ? 'Nach Schüler und Seite' : 'По ученикам и листам'}</summary>
+          {usage.pages.map((page,index) => <div className="kolin-usage__row" key={page.studentId + ':' + page.boardId + ':' + page.pageNumber + ':' + index}>
+            <span>{page.studentName} · {de ? 'Seite' : 'лист'} {page.pageNumber}</span>
+            <small>{de ? 'Prüfungen' : 'проверки'} {page.checks} · {de ? 'Versionen' : 'версии'} {page.uniqueRevisions} · AI {page.aiRequests} · {de ? 'Cache' : 'кэш'} {page.cacheHits} · {page.costUsd == null ? '—' : ' studentId={context.studentId} pageNumber={context.currentWorkbookPage} de={de} enabled={automaticPageAnalysisEnabled} />
+    <ol ref={log} className="kolin-panel__messages" role="log" aria-label={de ? 'Chat mit Kolyn' : 'Переписка с Kolyn'}
+      onScroll={() => { const element = log.current; if (element) nearBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80; }}>
+      {!chat.messages.length && <li className="kolin-panel__welcome">{de
+        ? 'Ich bin Kolyn. Ich helfe beim Erklären, beim Besprechen von Lösungen und beim Vorbereiten von Aufgaben.'
+        : 'Я Kolyn. Помогу объяснить тему, разобрать решение и подготовить задания.'}
+        <p>{automaticPageAnalysisEnabled
+          ? de ? 'Ich nutze gespeicherte Seitenanalysen und das Transkript. Noch nicht geprüfte Seiten kennzeichne ich.'
+            : 'Использую сохранённые проверки листов и расшифровку урока. Непроверенные листы отмечаю отдельно.'
+          : de ? 'Bei Ihrer Frage nutze ich das gespeicherte Transkript dieses Unterrichts. Ich gebe keine automatischen Hinweise.'
+            : 'Когда вы задаёте вопрос, я использую сохранённую расшифровку этого урока. Автоматических подсказок нет.'}</p>
+        <p>{de ? 'Zum Beispiel: Prüfe Melissas Aufgaben 7 und 8. Ich suche auf ihren gespeicherten Heftseiten.'
+          : 'Например: «Проверь задания 7 и 8 у Мелиссы». Найду их на сохранённых страницах её тетради.'}</p></li>}
+      {chat.messages.map(message => <li key={message.id} className={`kolin-panel__message kolin-panel__message--${message.role}`}
+        data-role={message.role} data-message-type={message.type}>
+        <span className="kolin-panel__speaker">{message.role === 'assistant' ? 'Kolyn' : de ? 'Sie' : 'Вы'}</span>
+        {message.text && (message.role === 'assistant' ? <KolinRichText text={message.text} /> : <p>{message.text}</p>)}
+        {message.role === 'assistant' && message.boardContext && <KolinReviewCard context={message.boardContext} preview={message.boardPreview} pages={message.boardPreviews} de={de} />}
+        {message.role === 'assistant' && (message.materials ?? (message.worksheet ? [message.worksheet] : [])).map(worksheet =>
+          <KolinWorksheetCard key={worksheet.id} classId={chat.classId} worksheet={worksheet}
+            appendStatus={message.materials ? message.materialAppendStatus?.[worksheet.id] : message.appendStatus} de={de}
+            onAdd={() => void chat.appendWorksheet(worksheet.id)} />)}
+        {message.role === 'assistant' && message.transcriptContext && <TranscriptContextNote context={message.transcriptContext} de={de} />}
+      </li>)}
+    </ol>
+    {chat.pending && <p className="kolin-panel__status" role="status">{de ? 'Kolyn denkt nach…' : 'Kolyn думает…'}</p>}
+    {chat.availability === 'checking' && <p className="kolin-panel__status" role="status">{de ? 'Kolyn wird verbunden…' : 'Подключаем Kolyn…'}</p>}
+    {chat.availability === 'unconfigured' && <p className="kolin-panel__status" role="status">{de ? 'Kolyn ist noch nicht verfügbar.' : 'Kolyn пока недоступен.'}</p>}
+    {chat.error && <div className="kolin-panel__error" role="alert">
+      <p>{failureMessage(chat.failureCode, de)}</p>
+      <button type="button" onClick={() => void chat.retry()} disabled={chat.pending || chat.availability === 'checking'}>
+        {de ? 'Erneut senden' : 'Повторить отправку'}
+      </button>
+    </div>}
+    <form className="kolin-panel__form" onSubmit={event => { event.preventDefault(); send(); }}>
+      <textarea ref={input} value={chat.draft} onChange={event => chat.setDraft(event.target.value)} rows={2} maxLength={2000}
+        aria-label={de ? 'An Kolyn schreiben…' : 'Напишите Kolyn…'} placeholder={de ? 'An Kolyn schreiben…' : 'Напишите Kolyn…'}
+        disabled={chat.pending} onKeyDown={event => {
+          if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); send(); }
+          event.stopPropagation();
+        }} />
+      <button type="submit" disabled={chat.pending || chat.availability !== 'ready' || !chat.draft.trim()}>{de ? 'Senden' : 'Отправить'}</button>
+    </form>
+  </aside>;
+}
+ + page.costUsd.toFixed(4)}</small>
+          </div>)}
+        </details>}
+        {!usage.totals.costComplete && <small>{de ? 'Kosten unvollständig: API-Preise müssen konfiguriert werden oder ein Request lieferte keine Token-Nutzung.' : 'Стоимость пока неполная: нужно настроить тарифы API или часть ответов не вернула расход токенов.'}</small>}
+      </>}
+    </section>}
     <SavedPageAnalysis classId={chat.classId} studentId={context.studentId} pageNumber={context.currentWorkbookPage} de={de} enabled={automaticPageAnalysisEnabled} />
     <ol ref={log} className="kolin-panel__messages" role="log" aria-label={de ? 'Chat mit Kolyn' : 'Переписка с Kolyn'}
       onScroll={() => { const element = log.current; if (element) nearBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80; }}>
