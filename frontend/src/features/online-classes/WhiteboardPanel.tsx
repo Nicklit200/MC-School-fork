@@ -29,7 +29,7 @@ import {
 } from './boardView';
 import { isPersonalBoard, personalBoardOwner, isPersonalWorkbookBoard } from './boards';
 import { VIEW_TOPIC, viewEvent, type DocumentViewport, type StudentViewSnapshot } from './events';
-import { documentPageSize, documentRailWidth, documentScrollBounds, zoomDocumentScroll, type DocumentScroll } from './documentBoardView';
+import { compactPageReviewColumns, documentPageSize, documentRailWidth, documentScrollBounds, zoomDocumentScroll, type DocumentScroll } from './documentBoardView';
 import { wheelZoomScale } from './wheelGesture';
 import { TwoFingerNavigation, type DocumentGesture } from './documentGesture';
 import { isPalmContact, type InputMode } from './inputPolicy';
@@ -423,18 +423,20 @@ export function WhiteboardPanel({
   }, [continuous, locked, active, classId, targetType, targetId, cancelDocumentFrame]);
   const layoutWidth = studentView?.layout === 'continuous' ? studentView.viewport.width : pageWidth;
   const layoutHeight = studentView?.layout === 'continuous' ? Math.max(1, Math.round(studentView.viewport.height * .92)) : pageHeight;
-  const reviewWidth = !showPageAnalysis ? 0 : compactPreview
-    ? Math.max(88, Math.min(210, Math.round(layoutWidth * .30)))
-    : Math.max(165, Math.min(340, Math.round(layoutWidth * .32)));
   const reviewGap = showPageAnalysis ? compactPreview ? 8 : 12 : 0;
+  const compactColumns = compactPreview && showPageAnalysis
+    ? compactPageReviewColumns(layoutWidth, layoutHeight, A4_PORTRAIT_ASPECT, reviewGap)
+    : null;
+  const reviewWidth = !showPageAnalysis ? 0 : compactColumns?.reviewWidth
+    ?? Math.max(165, Math.min(340, Math.round(layoutWidth * .32)));
   const reviewExtra = reviewWidth + reviewGap;
-  const paperLayoutWidth = showPageAnalysis
-    ? Math.max(compactPreview ? 96 : 140, layoutWidth - reviewExtra)
-    : layoutWidth;
+  const paperLayoutWidth = compactColumns?.paperWidth ?? (showPageAnalysis
+    ? Math.max(140, layoutWidth - reviewExtra)
+    : layoutWidth);
   const basePageSizes = useMemo(() => Array.from({ length: pages.count }, (_, index) => documentPageSize(paperLayoutWidth, layoutHeight,
     pageAspects[index] ?? (sourceAspect && Number.isFinite(sourceAspect) && sourceAspect > 0 ? sourceAspect : A4_PORTRAIT_ASPECT))),
   [pages.count, paperLayoutWidth, layoutHeight, pageAspects, sourceAspect]);
-  const baseRailWidth = Math.max(...basePageSizes.map(size => size.width)) + reviewExtra;
+  const baseRailWidth = Math.max(...basePageSizes.map(size => size.width), compactColumns?.paperWidth ?? 0) + reviewExtra;
   const baseRailHeight = useMemo(() => basePageSizes.reduce((sum, size) => sum + size.height, 0)
     + 24 * Math.max(0, basePageSizes.length - 1), [basePageSizes]);
   const displayedDocumentZoom = studentView?.layout === 'continuous'
@@ -974,7 +976,7 @@ export function WhiteboardPanel({
             aria-current={index === pages.current ? 'page' : undefined}
             aria-label={t('onlineClass.board.page.current', { current: index + 1, total: pages.count })}
             style={continuous || showPageAnalysis ? {
-              ...(continuous ? { width: (basePageSizes[index].width + reviewExtra) * displayedDocumentZoom, height: basePageSizes[index].height * displayedDocumentZoom } : {}),
+              ...(continuous ? { width: (Math.max(basePageSizes[index].width, compactColumns?.paperWidth ?? 0) + reviewExtra) * displayedDocumentZoom, height: basePageSizes[index].height * displayedDocumentZoom } : {}),
               ...(showPageAnalysis ? { '--kolyn-review-width': `${reviewWidth * (continuous ? displayedDocumentZoom : 1)}px`,
                 '--kolyn-review-gap': `${reviewGap * (continuous ? displayedDocumentZoom : 1)}px` } : {}),
             } as CSSProperties : undefined}>
