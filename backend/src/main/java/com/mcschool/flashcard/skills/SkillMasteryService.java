@@ -22,7 +22,8 @@ public class SkillMasteryService {
     public record GroupOption(UUID id, String name, List<StudentOption> students) {}
     public record MasterySnapshot(UUID studentId, String studentName, Map<String,Integer> mastery, Instant updatedAt) {}
     public record MasteryHistoryEntry(long id, UUID studentId, String studentName, String skillId,
-                                      int previousMastery, int mastery, Instant updatedAt, UUID updatedBy) {}
+                                      int previousMastery, int mastery, Instant updatedAt, UUID updatedBy,
+                                      Instant lessonAt, String lessonTitle, UUID lessonId) {}
     public record UpdateRequest(int mastery) {}
 
     private final JdbcTemplate jdbc;
@@ -100,21 +101,42 @@ public class SkillMasteryService {
         User student = requireVisibleStudent(caller, studentId);
         boards.get(boardId);
         return jdbc.query("""
-            SELECT id, skill_id, previous_mastery, mastery, updated_at, updated_by
-            FROM student_skill_mastery_history
-            WHERE student_id = ? AND board_id = ?
-            ORDER BY updated_at DESC, id DESC
+            SELECT h.id,h.skill_id,h.previous_mastery,h.mastery,h.updated_at,h.updated_by,
+                   classroom.id AS lesson_id,classroom.title AS lesson_title,
+                   classroom.scheduled_start_at AS lesson_at
+            FROM student_skill_mastery_history h
+            -- Only a real recorded skill-evidence change can be linked to a lesson.
+            -- Both timestamps use transaction-time now(), so the exact mastery
+            -- and short time window uniquely identify this update. Do not guess
+            -- a lesson from the student's timetable for manual updates.
+            LEFT JOIN LATERAL (
+                SELECT e.source_ref
+                FROM student_skill_evidence e
+                WHERE e.student_id=h.student_id AND e.board_id=h.board_id
+                  AND e.skill_id=h.skill_id AND e.mastery_after=h.mastery
+                  AND e.source_type='LESSON'
+                  AND e.recorded_at BETWEEN h.updated_at-INTERVAL '10 seconds'
+                                        AND h.updated_at+INTERVAL '10 seconds'
+                ORDER BY abs(extract(epoch from e.recorded_at-h.updated_at)),e.id DESC
+                LIMIT 1
+            ) matched ON true
+            LEFT JOIN online_classes classroom ON classroom.id =
+                CASE WHEN substring(matched.source_ref from 1 for 36) ~*
+                    '^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$'
+                    THEN substring(matched.source_ref from 1 for 36)::uuid
+                    ELSE NULL END
+            WHERE h.student_id=? AND h.board_id=?
+            ORDER BY h.updated_at DESC,h.id DESC
             LIMIT 500
             """, (rs, rowNum) -> new MasteryHistoryEntry(
-                rs.getLong("id"),
-                studentId,
-                student.getFullName(),
-                rs.getString("skill_id"),
-                rs.getInt("previous_mastery"),
-                rs.getInt("mastery"),
+                rs.getLong("id"),studentId,student.getFullName(),rs.getString("skill_id"),
+                rs.getInt("previous_mastery"),rs.getInt("mastery"),
                 rs.getTimestamp("updated_at").toInstant(),
-                rs.getObject("updated_by", UUID.class)
-            ), studentId, boardId);
+                rs.getObject("updated_by", UUID.class),
+                rs.getTimestamp("lesson_at")==null?null:rs.getTimestamp("lesson_at").toInstant(),
+                rs.getString("lesson_title"),
+                rs.getObject("lesson_id",UUID.class)
+            ),studentId,boardId);
     }
 
     @Transactional

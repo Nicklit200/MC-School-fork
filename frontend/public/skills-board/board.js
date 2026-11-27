@@ -271,13 +271,24 @@ function historyGroups(){
   const entries=selectedStudents().flatMap(student=>(masteryHistoryByStudent[student.id]||[]).map(entry=>({
     ...entry,studentId:entry.studentId||student.id,studentName:entry.studentName||student.fullName
   })));
-  entries.sort((a,b)=>(Date.parse(b.updatedAt)-Date.parse(a.updatedAt))||((Number(b.id)||0)-(Number(a.id)||0)));
-  const groups=[];
+  // A skill may be reviewed today for a lesson taught several days earlier.
+  // Group and sort linked history by the actual lesson, never by the write time.
+  // Unlinked manual edits retain their real change timestamp.
+  entries.sort((a,b)=>(Date.parse(b.lessonAt||b.updatedAt)-Date.parse(a.lessonAt||a.updatedAt))
+    ||((Number(b.id)||0)-(Number(a.id)||0)));
+  const groups=[],byLesson=new Map();
   for(const entry of entries){
-    const at=Date.parse(entry.updatedAt)||0,actor=entry.updatedBy||"",last=groups.at(-1);
-    if(last&&last.updatedBy===actor&&last.oldestAt-at<=historyWindowMs){
+    const at=Date.parse(entry.lessonAt||entry.updatedAt)||0,actor=entry.updatedBy||"",last=groups.at(-1);
+    if(entry.lessonId){
+      const key=String(entry.lessonId),existing=byLesson.get(key);
+      if(existing){existing.entries.push(entry);continue;}
+      const group={id:`lesson|${key}`,lessonId:key,lessonTitle:entry.lessonTitle||"Урок",
+        updatedAt:entry.lessonAt||entry.updatedAt,updatedBy:actor,newestAt:at,oldestAt:at,entries:[entry]};
+      byLesson.set(key,group);groups.push(group);
+    }else if(last&&!last.lessonId&&last.updatedBy===actor&&last.oldestAt-at<=historyWindowMs){
       last.entries.push(entry);last.oldestAt=at;
-    }else groups.push({id:`${entry.updatedAt}|${entry.id}`,updatedAt:entry.updatedAt,updatedBy:actor,newestAt:at,oldestAt:at,entries:[entry]});
+    }else groups.push({id:`${entry.updatedAt}|${entry.id}`,updatedAt:entry.updatedAt,
+      updatedBy:actor,newestAt:at,oldestAt:at,entries:[entry]});
   }
   return groups;
 }
@@ -317,7 +328,10 @@ function renderHistoryPanel(){
     const card=element("div","history-update"+(isSelected?" selected":""));card.tabIndex=0;card.setAttribute("role","button");
     card.setAttribute("aria-pressed",String(isSelected));
     const top=element("div","history-update-top");
-    top.append(element("span","history-date",formatHistoryDate(group.updatedAt)),element("span","history-items-count",`${changes.length} изм.`));
+    top.append(element("span","history-date",group.lessonId
+      ? `${group.lessonTitle} · ${formatHistoryDate(group.updatedAt)}`
+      : `Изменено ${formatHistoryDate(group.updatedAt)}`),
+      element("span","history-items-count",`${changes.length} изм.`));
     card.append(top,element("div","history-summary",`${skills.size} навыков${names.length?" · "+names.slice(0,2).join(", ")+(names.length>2?" +"+(names.length-2):""):""}`));
     if(isSelected){
       const list=element("div","history-changes");
