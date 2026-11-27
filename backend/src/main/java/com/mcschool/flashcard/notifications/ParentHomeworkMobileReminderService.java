@@ -1,14 +1,7 @@
 package com.mcschool.flashcard.notifications;
 
 import com.mcschool.flashcard.homeworks.HomeworkRepository;
-import com.mcschool.flashcard.users.Language;
-import com.mcschool.flashcard.users.Role;
-import com.mcschool.flashcard.users.User;
-import com.mcschool.flashcard.users.UserRepository;
-import com.mcschool.flashcard.users.UserStatus;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.time.LocalDate;
+ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -38,7 +31,6 @@ import org.springframework.stereotype.Service;
 public class ParentHomeworkMobileReminderService {
     private static final Logger LOG=LoggerFactory.getLogger(ParentHomeworkMobileReminderService.class);
     private static final int MAX_ATTEMPTS=5;
-    private final UserRepository users;
     private final HomeworkRepository homeworks;
     private final NativePushDevices devices;
     private final ExpoPushService expo;
@@ -46,13 +38,13 @@ public class ParentHomeworkMobileReminderService {
     private final ZoneId zone;
 
     public record Delivery(UUID id, UUID parentId, UUID studentId, UUID deviceId,
-                           String token, LocalDate homeworkDay, String phase, int attempts) {}
+                           LocalDate homeworkDay, String phase, int attempts) {}
+    public record Recipient(String childName, String language, String expoToken) {}
 
     public ParentHomeworkMobileReminderService(
-            UserRepository users, HomeworkRepository homeworks, NativePushDevices devices,
+            HomeworkRepository homeworks, NativePushDevices devices,
             ExpoPushService expo, JdbcTemplate jdbc,
             @Value("${app.native-parent-reminders.zone:Europe/Berlin}") String zone) {
-        this.users=users;
         this.homeworks=homeworks;
         this.devices=devices;
         this.expo=expo;
@@ -95,24 +87,25 @@ public class ParentHomeworkMobileReminderService {
 
     /** Capture only work that is actually unfinished at this instant. */
     void capture(String phase, LocalDate homeworkDay) {
-        int queued=0;
-        for (User child : users.findAllByRoleAndStatusAndArchivedFalseOrderByFullNameAsc(
-                Role.STUDENT, UserStatus.ACTIVE)) {
-            User parent=child.getParent();
-            if (!activeParent(parent)
-                    || homeworks.countOpenWorksheetsForDay(child.getId(),homeworkDay)==0)
-                continue;
-            for (NativePushDevices.Device device:devices.devicesFor(parent.getId())) {
-                queued+=jdbc.update("""
-                    INSERT INTO parent_homework_mobile_reminder_outbox
-                        (id, device_id, parent_id, student_id, homework_day, phase)
-                    VALUES (?,?,?,?,?,?)
-                    ON CONFLICT (device_id, student_id, homework_day, phase) DO NOTHING
-                    """,UUID.randomUUID(),device.id(),parent.getId(),child.getId(),
-                        homeworkDay,phase);
-            }
-        }
-        if (queued>0)
+        // A single SQL INSERT...SELECT is safe under concurrent schedulers
+        // and does not lazy-load parents after a JPA transaction has closed.
+        int queued=jdbc.update("""
+            INSERT INTO parent_homework_mobile_reminder_outbox
+                (id,device_id,parent_id,student_id,homework_day,phase)
+            SELECT gen_random_uuid(),d.id,p.id,s.id,?,?
+            FROM users s
+            JOIN users p ON p.id=s.parent_id
+            JOIN native_push_devices d ON d.user_id=p.id AND d.disabled_at IS NULL
+            WHERE s.role='STUDENT' AND s.status='ACTIVE' AND s.archived=false
+              AND p.role='PARENT' AND p.status='ACTIVE' AND p.archived=false
+              AND EXISTS (
+                SELECT 1 FROM homeworks h
+                WHERE h.student_id=s.id AND h.start_date=?
+                  AND h.worksheet_pdf IS NOT NULL AND h.submitted_at IS NULL
+              )
+            ON CONFLICT (device_id,student_id,homework_day,phase) DO NOTHING
+            """,homeworkDay,phase,homeworkDay);
+        if(queued>0)
             LOG.info("Queued parent homework native reminders phase={} day={} count={}",
                     phase,homeworkDay,queued);
     }
@@ -144,7 +137,7 @@ public class ParentHomeworkMobileReminderService {
                 rs.getObject("parent_id",UUID.class),
                 rs.getObject("student_id",UUID.class),
                 rs.getObject("device_id",UUID.class),
-                null,rs.getObject("homework_day",LocalDate.class),
+                rs.getObject("homework_day",LocalDate.class),
                 rs.getString("phase"),rs.getInt("attempts")));
         return claimed.isEmpty()?null:claimed.get(0);
     }
@@ -154,39 +147,45 @@ public class ParentHomeworkMobileReminderService {
             mark(delivery.id(),"SKIPPED");
             return;
         }
-        User child=users.findById(delivery.studentId()).orElse(null);
-        User parent=users.findById(delivery.parentId()).orElse(null);
-        if(child==null||child.isArchived()||child.getStatus()!=UserStatus.ACTIVE
-                ||child.getRole()!=Role.STUDENT||!activeParent(parent)
-                ||child.getParent()==null ||!child.getParent().getId().equals(parent.getId())) {
+        // The links, account state, and device owner are checked *again* right
+        // before delivery: a phone removed from a parent never sees child data.
+        List<Recipient> recipients=jdbc.query("""
+            SELECT s.full_name AS child_name,p.preferred_language AS language,
+                   d.expo_token
+            FROM users s
+            JOIN users p ON p.id=s.parent_id
+            JOIN native_push_devices d ON d.id=? AND d.user_id=p.id
+            WHERE s.id=? AND p.id=?
+              AND s.role='STUDENT' AND s.status='ACTIVE' AND s.archived=false
+              AND p.role='PARENT' AND p.status='ACTIVE' AND p.archived=false
+              AND d.disabled_at IS NULL
+            """,(rs,i)->new Recipient(rs.getString("child_name"),
+                    rs.getString("language"),rs.getString("expo_token")),
+                    delivery.deviceId(),delivery.studentId(),delivery.parentId());
+        if(recipients.isEmpty()) {
             mark(delivery.id(),"SKIPPED");
             return;
         }
-        long missing=homeworks.countOpenWorksheetsForDay(child.getId(),delivery.homeworkDay());
+        long missing=homeworks.countOpenWorksheetsForDay(
+                delivery.studentId(),delivery.homeworkDay());
         if(missing==0) {
             mark(delivery.id(),"SKIPPED");
             return;
         }
-        List<NativePushDevices.Device> available=devices.devicesFor(parent.getId());
-        NativePushDevices.Device device=available.stream()
-                .filter(d->d.id().equals(delivery.deviceId())).findFirst().orElse(null);
-        if(device==null) {
-            mark(delivery.id(),"SKIPPED");
-            return;
-        }
-        boolean de=parent.getPreferredLanguage()==Language.DE;
+        Recipient recipient=recipients.get(0);
+        boolean de="DE".equals(recipient.language());
         boolean morning="MORNING_MISSED".equals(delivery.phase());
         String title=de?(morning?"Mindcrafti: Hausaufgabe versäumt":
                 "Mindcrafti: Hausaufgabe offen"):
                 (morning?"Mindcrafti: домашка пропущена":"Mindcrafti: домашка не сдана");
-        String body=body(child.getFullName(),missing,morning,de);
+        String body=body(recipient.childName(),missing,morning,de);
         try {
-            expo.send(device.token(),title,body,"/parent");
+            expo.send(recipient.expoToken(),title,body,"/parent");
             mark(delivery.id(),"SENT");
             LOG.info("Parent native reminder accepted phase={} day={} parentId={} childId={}",
-                    delivery.phase(),delivery.homeworkDay(),parent.getId(),child.getId());
+                    delivery.phase(),delivery.homeworkDay(),delivery.parentId(),delivery.studentId());
         } catch(ExpoPushService.DeviceNotRegisteredException expired) {
-            devices.disable(device.id());
+            devices.disable(delivery.deviceId());
             mark(delivery.id(),"SKIPPED");
         } catch(RuntimeException failure) {
             if(delivery.attempts()>=MAX_ATTEMPTS) {
@@ -225,11 +224,6 @@ public class ParentHomeworkMobileReminderService {
             return homeworkDay.plusDays(1).equals(local)
                     && !t.isBefore(LocalTime.of(9,0)) && t.isBefore(LocalTime.of(13,0));
         return false;
-    }
-
-    private static boolean activeParent(User parent) {
-        return parent!=null && parent.getRole()==Role.PARENT
-                && parent.getStatus()==UserStatus.ACTIVE && !parent.isArchived();
     }
 
     private void mark(UUID id,String state) {
