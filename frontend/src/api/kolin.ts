@@ -75,6 +75,8 @@ export interface KolinPageAnalysisResult extends KolinPageAnalysisCandidate {
   failureCode: string | null;
   capturedAt: string;
   finishedAt: string | null;
+  /** False when a newer pupil ink revision exists; retained as historical feedback. */
+  isCurrent: boolean;
 }
 
 export interface KolinBoardContext extends Omit<KolinBoardSnapshot, 'observedAt' | 'imageDataUrl' | 'additionalPages'> {
