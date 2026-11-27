@@ -99,3 +99,67 @@ WebView; Fast Refresh does **not** hot-reload the website source through Metro.
 Do not launch `eas build --profile preview` when you only want to iterate
 on JavaScript screens. Do not run `npm audit fix --force` without inspecting
 the dependency impact.
+
+## Teacher iPad mode (27 November 2026)
+
+The iOS app opens the existing teacher web dashboard inside the native app after
+a teacher signs in. The role landing routes are:
+- TEACHER: `/students` (teacher workspace)
+- ADMIN: `/teachers`
+- STUDENT: `/today`
+- PARENT: `/parent`
+
+The iPad already has `supportsTablet: true` and the default orientation allows
+portrait and landscape. The website's responsive teacher shell is used rather
+than creating a second, divergent teacher interface.
+
+### iPad classroom capabilities
+- The embedded classroom uses the existing LiveKit online lesson and whiteboard.
+- The web whiteboard already has an iPadOS-specific native Touch Events path
+  for Apple Pencil, including pressure samples, palm rejection and two-finger
+  pan/zoom. It is reused by the WebView; this is not a separate native drawing
+  canvas.
+- The iOS WebView is configured for inline media and same-host camera/microphone
+  capture prompts. The app declares the camera and microphone usage descriptions.
+- Teacher lesson preparation, group/one-off participants, personal workbooks,
+  answers, homework and student progress are opened from the existing website
+  inside the app.
+
+### TestFlight build
+Run from the `mobile/` directory:
+```bash
+npm install
+npm run check
+npx expo install --check
+npm run build:testflight
+```
+
+After EAS finishes and the iOS build is available in App Store Connect:
+```bash
+npm run submit:testflight
+```
+
+This starts a new signed store-distributed iOS build for TestFlight; it does not
+change the live Railway website. A native dependency, Info.plist permission or
+WebView setting change requires a new build, not just an OTA update.
+
+### Physical iPad acceptance checklist
+1. Install the new build from TestFlight and sign in with a TEACHER account.
+2. Confirm the app opens `/students` and the teacher navigation works in both
+   portrait and landscape.
+3. Open an existing lesson, check the prejoin camera/microphone preview and
+   grant iOS permissions when asked.
+4. Join the LiveKit room; verify two-way audio, camera, waiting room, participant
+   controls and reconnect after briefly disabling Wi-Fi.
+5. Write with Apple Pencil on the shared and personal boards. Verify quick short
+   strokes, pressure, palm rejection, undo and saved annotations.
+6. Use two fingers to pan/zoom without creating ink. Confirm keyboard/text input
+   still works.
+7. Open the shared and personal PDFs, answers and completed lesson documents.
+   Check file preview/download behavior on the physical iPad.
+8. Create or review homework and confirm the correct student/group is selected.
+9. End a test lesson only after saved documents are visible; verify the teacher
+   returns to the lesson page and the room is ended.
+
+A successful EAS build is not proof of camera, microphone, LiveKit or Pencil
+behavior. Those items must be checked on the actual iPad.
