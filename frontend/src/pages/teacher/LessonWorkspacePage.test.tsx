@@ -7,7 +7,7 @@ import { api, request } from '../../api/client';
 import { completedLessonApi, lessonPreparationApi } from '../../api/lessonPreparation';
 // The workspace is mounted for a signed-in teacher, outside the private pilot.
 vi.mock('../../auth/AuthContext',()=>({useAuth:()=>({user:{id:'teacher-1',role:'TEACHER'}})}));
-vi.mock('../../api/client',()=>({api:{lessons:{groupLessons:vi.fn()}},request:vi.fn()}));
+vi.mock('../../api/client',()=>({api:{lessons:{groupLessons:vi.fn(),participants:vi.fn()},students:{list:vi.fn()}},request:vi.fn()}));
 vi.mock('../../api/lessonPreparation',()=>({lessonPreparationApi:{get:vi.fn(),update:vi.fn(),assignHomeworkSeries:vi.fn()},completedLessonApi:{list:vi.fn()}}));
 vi.mock('./PersonalWorkbooksPanel',()=>({PersonalWorkbooksPanel:()=> <div>Мелисса: тетрадь и решения</div>}));
 vi.mock('./GoogleDrivePdfPicker',()=>({GoogleDrivePdfPicker:()=> <button>Google Drive</button>}));
@@ -16,6 +16,7 @@ vi.mock('../../features/online-classes/StartOnlineClassButton',()=>({StartOnline
 beforeEach(()=>{
   cleanup();localStorage.clear();vi.mocked(request).mockResolvedValue([] as never);
   vi.mocked(api.lessons.groupLessons).mockResolvedValue([{eventId:'lesson-1',title:'Дроби',groupName:'Математика',startsAt:'2026-11-05T14:00:00Z',endsAt:'2026-11-05T15:00:00Z'}] as never);
+  vi.mocked(api.students.list).mockResolvedValue([{id:'vitalina',fullName:'Виталина',status:'ACTIVE'}] as never);
   vi.mocked(lessonPreparationApi.get).mockResolvedValue({eventId:'lesson-1',homeworkNotes:'Задания 1-3',difficulties:'Знаки',coveredMaterial:'Дроби',lessonPlan:'План',manualTranscriptText:null,transcriptText:'Автоматическая запись'} as never);
   vi.mocked(completedLessonApi.list).mockResolvedValue([]);
   vi.mocked(lessonPreparationApi.update).mockResolvedValue({} as never);
@@ -40,6 +41,16 @@ describe('lesson workspace',()=>{
     fireEvent.click(screen.getByRole('button',{name:'Закрыть'}));
     expect(screen.getByText('Настройки срока и файла')).not.toBeVisible();
   });
+  it('passes the current lesson and active students to one-off participant management',async()=>{
+    vi.mocked(api.lessons.groupLessons).mockResolvedValue([{eventId:'lesson-1',title:'Дроби',groupName:'Математика',groupId:'group-1',studentId:null,studentName:null,participantStudentIds:['semen'],startsAt:'2099-11-05T14:00:00Z',endsAt:'2099-11-05T15:00:00Z'}] as never);
+    mount();
+    await screen.findByRole('heading',{name:'Дроби'});
+    expect(await screen.findByText('Ученики этого урока')).toBeInTheDocument();
+    expect(screen.getByRole('combobox',{name:'Выбрать ученика для добавления'})).toBeInTheDocument();
+    expect(screen.getByRole('button',{name:'+ Добавить на один урок'})).toBeDisabled();
+    expect(api.students.list).toHaveBeenCalledTimes(1);
+  });
+
   it('switches the displayed homework error with previous and next arrows, wrapping at both ends',async()=>{
     vi.mocked(lessonPreparationApi.get).mockResolvedValue({
       eventId:'lesson-1',
