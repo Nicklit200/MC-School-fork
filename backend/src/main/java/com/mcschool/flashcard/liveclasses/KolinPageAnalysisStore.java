@@ -34,6 +34,11 @@ public class KolinPageAnalysisStore {
                          long documentVersion, long sharedDocumentVersion, long revision,
                          String state, String text, String failureCode,
                          Instant capturedAt, Instant finishedAt) {}
+    /** A durable receipt plus whether it still matches the pupil's latest ink revision. */
+    public record SavedResult(UUID id, UUID studentId, String boardId, int pageNumber,
+                              long documentVersion, long sharedDocumentVersion, long revision,
+                              String state, String text, String failureCode,
+                              Instant capturedAt, Instant finishedAt, boolean isCurrent) {}
     public record Claim(boolean acquired, Result result) {}
     public record Candidate(UUID studentId, String boardId, int pageNumber,
                             long documentVersion, long sharedDocumentVersion, long revision) {}
@@ -51,6 +56,12 @@ public class KolinPageAnalysisStore {
                 rs.getLong("shared_document_version"),rs.getLong("ink_revision"),expired?"FAILED":state,
                 rs.getString("analysis_text"),expired?"ABANDONED":rs.getString("failure_code"),
                 created,finished == null ? null : finished.toInstant());
+    };
+    private static final RowMapper<SavedResult> SAVED_MAPPER = (rs, i) -> {
+        Result result=MAPPER.mapRow(rs,i);
+        return new SavedResult(result.id(),result.studentId(),result.boardId(),result.pageNumber(),
+                result.documentVersion(),result.sharedDocumentVersion(),result.revision(),result.state(),
+                result.text(),result.failureCode(),result.capturedAt(),result.finishedAt(),rs.getBoolean("is_current"));
     };
     private final JdbcTemplate jdbc;
 
@@ -174,26 +185,33 @@ public class KolinPageAnalysisStore {
         return byId(key,id);
     }
 
-    /** Only receipts for the current PDF and current ink revision are returned to live consumers.
-     * Earlier versions remain evidence for historical consumers, never a current verdict. */
+    /**
+     * Return durable receipts for the current workbook version, including older ink
+     * revisions. A newer pupil stroke must not make the last completed check disappear
+     * while the next revision waits for its quiet window or is being analysed.
+     * isCurrent distinguishes a verdict for the latest pupil ink from a preserved
+     * historical verdict. The UI can show both the last READY result and a newer RUNNING
+     * or FAILED attempt without ever presenting stale feedback as a current verdict.
+     */
     @Transactional(readOnly=true)
-    public List<Result> current(UUID classId, UUID teacherId, UUID studentId, String boardId,
-                                long documentVersion, long sharedVersion) {
+    public List<SavedResult> current(UUID classId, UUID teacherId, UUID studentId, String boardId,
+                                     long documentVersion, long sharedVersion) {
         return jdbc.query("""
-            SELECT a.* FROM kolyn_page_analyses a
+            SELECT a.*, COALESCE(latest.sequence = a.pupil_ink_revision, false) AS is_current
+            FROM kolyn_page_analyses a
             JOIN online_class_annotation_documents doc ON doc.class_id=a.class_id
               AND doc.target_type='WHITEBOARD' AND doc.target_id=a.board_id
               AND doc.page_index=a.page_number-1
-            JOIN LATERAL (
+            LEFT JOIN LATERAL (
                 SELECT ev.sequence FROM online_class_annotation_events ev
                 WHERE ev.document_id=doc.id
                   AND (ev.layer_owner_id=a.student_id OR ev.operation_type='CLEAR_ALL')
                 ORDER BY ev.sequence DESC LIMIT 1
-            ) latest ON latest.sequence=a.pupil_ink_revision
+            ) latest ON true
             WHERE a.class_id=? AND a.teacher_id=? AND a.student_id=? AND a.board_id=?
               AND a.document_version=? AND a.shared_document_version=? AND a.analysis_version=?
-            ORDER BY a.page_number LIMIT 100
-            """,MAPPER,classId,teacherId,studentId,boardId,documentVersion,sharedVersion,ANALYSIS_VERSION);
+            ORDER BY a.page_number, a.created_at DESC, a.id DESC LIMIT 500
+            """,SAVED_MAPPER,classId,teacherId,studentId,boardId,documentVersion,sharedVersion,ANALYSIS_VERSION);
     }
 
     private Result exact(Key key,long pupilRevision) {
