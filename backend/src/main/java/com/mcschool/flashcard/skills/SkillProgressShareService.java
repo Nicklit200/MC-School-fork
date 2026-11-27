@@ -55,8 +55,7 @@ public class SkillProgressShareService {
 
     public record ShareToken(String token) {}
     public record PublicStudent(String fullName, Integer grade, String schoolType) {}
-    public record PublicHistoryEntry(String skillId, int previousMastery, int mastery, Instant updatedAt,
-                                     Instant lessonAt, String lessonTitle, UUID lessonId) {}
+    public record PublicHistoryEntry(String skillId, int previousMastery, int mastery, Instant updatedAt) {}
     public record PublicProgress(
             String boardId,
             long boardRevision,
@@ -156,31 +155,17 @@ public class SkillProgressShareService {
             target.studentId(), target.boardId()).forEach(entry -> mastery.put(entry.getKey(), entry.getValue()));
 
         List<PublicHistoryEntry> history = jdbc.query("""
-            SELECT h.skill_id,h.previous_mastery,h.mastery,h.updated_at,
-                   classroom.id AS lesson_id,classroom.title AS lesson_title,
-                   classroom.scheduled_start_at AS lesson_at
-            FROM student_skill_mastery_history h
-            LEFT JOIN LATERAL (
-                SELECT e.source_ref
-                FROM student_skill_evidence e
-                WHERE e.student_id=h.student_id AND e.board_id=h.board_id
-                  AND e.skill_id=h.skill_id AND e.mastery_after=h.mastery
-                  AND e.source_type='LESSON'
-                  AND e.recorded_at BETWEEN h.updated_at-INTERVAL '10 seconds'
-                                        AND h.updated_at+INTERVAL '10 seconds'
-                ORDER BY abs(extract(epoch from e.recorded_at-h.updated_at)),e.id DESC
-                LIMIT 1
-            ) matched ON true
-            LEFT JOIN online_classes classroom
-                ON split_part(matched.source_ref,':',1)=classroom.id::text
-            WHERE h.student_id=? AND h.board_id=?
-            ORDER BY h.updated_at DESC,h.id DESC LIMIT 500
-            """, (rs,rowNum) -> new PublicHistoryEntry(
-                rs.getString("skill_id"),rs.getInt("previous_mastery"),rs.getInt("mastery"),
-                rs.getTimestamp("updated_at").toInstant(),
-                rs.getTimestamp("lesson_at")==null?null:rs.getTimestamp("lesson_at").toInstant(),
-                rs.getString("lesson_title"),rs.getObject("lesson_id",UUID.class)),
-            target.studentId(),target.boardId());
+            SELECT skill_id, previous_mastery, mastery, updated_at
+            FROM student_skill_mastery_history
+            WHERE student_id = ? AND board_id = ?
+            ORDER BY updated_at DESC, id DESC
+            LIMIT 500
+            """, (rs, rowNum) -> new PublicHistoryEntry(
+                rs.getString("skill_id"),
+                rs.getInt("previous_mastery"),
+                rs.getInt("mastery"),
+                rs.getTimestamp("updated_at").toInstant()),
+            target.studentId(), target.boardId());
 
         Instant updatedAt = jdbc.query("""
             SELECT max(updated_at)
