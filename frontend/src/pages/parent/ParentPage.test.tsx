@@ -71,7 +71,7 @@ afterEach(() => {
 
 describe('parent evening reminder setup', () => {
   it('keeps the homework notice compact and links to notification settings', async () => {
-    mountPage();
+    render(<MemoryRouter><ParentNotifications compact /></MemoryRouter>);
     expect(await screen.findByText('Уведомления о домашнем задании пока не подключены.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Настроить' })).toHaveAttribute('href', '/parent/settings');
     expect(screen.queryByText('Для этого аккаунта не указан email для резервного сообщения.')).not.toBeInTheDocument();
@@ -81,7 +81,7 @@ describe('parent evening reminder setup', () => {
   it('warns in full settings when nightly push has no connected device and no email fallback', async () => {
     render(<ParentNotifications />);
     expect(await screen.findByText('На этом аккаунте пока нет подключённого телефона для уведомлений.')).toBeInTheDocument();
-    expect(screen.getByText('У аккаунта также нет email для резервного сообщения.')).toBeInTheDocument();
+    expect(screen.getByText('Для этого аккаунта не указан email для резервного сообщения.')).toBeInTheDocument();
   });
 
   it('routes an iPhone test to native push when the TestFlight device is connected', async () => {
@@ -97,7 +97,7 @@ describe('parent evening reminder setup', () => {
       enabled: true, registeredDevices: 1, ready: true, emailAvailable: false,
     });
     render(<ParentNotifications />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Проверить уведомление' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Отправить тест на телефон' }));
     await waitFor(() => expect(api.push.test).toHaveBeenCalledOnce());
     expect(await screen.findByText('Тест принят службой уведомлений. Проверьте телефон.')).toBeInTheDocument();
   });
