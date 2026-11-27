@@ -79,8 +79,9 @@ public class KolinPageAnalysisStore {
         jdbc.update("""
           INSERT INTO kolyn_page_analysis_usage_events
           (id,analysis_id,class_id,teacher_id,student_id,board_id,page_number,pupil_ink_revision,event_type,state,model_name)
-          VALUES (?,?,?,?,?,?,?,?,?,'STARTED',?)
-          """,id,analysisId,key.classId(),key.teacherId(),key.studentId(),key.boardId(),key.pageNumber(),key.revision(),eventType,model);
+          SELECT ?,id,class_id,teacher_id,student_id,board_id,page_number,pupil_ink_revision,?,'STARTED',?
+          FROM kolyn_page_analyses WHERE id=? AND class_id=? AND teacher_id=? AND student_id=?
+          """,id,eventType,model,analysisId,key.classId(),key.teacherId(),key.studentId());
         return id;
     }
 
@@ -105,7 +106,7 @@ public class KolinPageAnalysisStore {
     @Transactional(readOnly=true)
     public UsageTotals usageTotals(UUID classId,UUID teacherId) {
         var row=jdbc.queryForMap("""
-          SELECT count(*) FILTER(WHERE event_type='AI_REQUEST') checks,
+          SELECT count(*) checks,
           count(DISTINCT(student_id,board_id,page_number,pupil_ink_revision)) unique_revisions,
           count(*) FILTER(WHERE event_type='AI_REQUEST') ai_requests,
           count(*) FILTER(WHERE event_type='CACHE_HIT') cache_hits,
@@ -125,8 +126,8 @@ public class KolinPageAnalysisStore {
     @Transactional(readOnly=true)
     public List<PageUsage> pageUsage(UUID classId,UUID teacherId) {
         return jdbc.query("""
-          SELECT e.student_id,u.name student_name,e.board_id,e.page_number,
-          count(*) FILTER(WHERE e.event_type='AI_REQUEST') checks,
+          SELECT e.student_id,u.full_name student_name,e.board_id,e.page_number,
+          count(*) checks,
           count(DISTINCT e.pupil_ink_revision) unique_revisions,
           count(*) FILTER(WHERE e.event_type='AI_REQUEST') ai_requests,
           count(*) FILTER(WHERE e.event_type='CACHE_HIT') cache_hits,
@@ -134,8 +135,8 @@ public class KolinPageAnalysisStore {
           sum(e.cost_usd) cost_usd,
           COALESCE(bool_and(e.state='SUCCEEDED' AND e.cost_usd IS NOT NULL) FILTER(WHERE e.event_type='AI_REQUEST'),false) cost_complete
           FROM kolyn_page_analysis_usage_events e JOIN users u ON u.id=e.student_id
-          WHERE e.class_id=? AND e.teacher_id=? GROUP BY e.student_id,u.name,e.board_id,e.page_number
-          ORDER BY u.name,e.board_id,e.page_number
+          WHERE e.class_id=? AND e.teacher_id=? GROUP BY e.student_id,u.full_name,e.board_id,e.page_number
+          ORDER BY u.full_name,e.board_id,e.page_number
           """,(rs,i)->new PageUsage(rs.getObject("student_id",UUID.class),rs.getString("student_name"),
           rs.getString("board_id"),rs.getInt("page_number"),rs.getLong("checks"),rs.getLong("unique_revisions"),
           rs.getLong("ai_requests"),rs.getLong("cache_hits"),rs.getLong("input_tokens"),rs.getLong("output_tokens"),
