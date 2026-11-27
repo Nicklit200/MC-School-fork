@@ -73,8 +73,11 @@ class KolinPageAnalysisStoreIntegrationTest {
     private java.util.List<KolinPageAnalysisStore.Candidate> candidates(){
         return store.candidates(room.getId(),teacher.getId(),pupil.getId(),board,0,0);
     }
-    private java.util.List<KolinPageAnalysisStore.Result> current(){
+    private java.util.List<KolinPageAnalysisStore.SavedResult> current(){
         return store.current(room.getId(),teacher.getId(),pupil.getId(),board,0,0);
+    }
+    private java.util.List<KolinPageAnalysisStore.SavedResult> current(long documentVersion){
+        return store.current(room.getId(),teacher.getId(),pupil.getId(),board,documentVersion,0);
     }
 
     @Test void thirtySecondPauseAndPupilOnlyRevisionDeduplicatePaidReviews(){
@@ -90,15 +93,18 @@ class KolinPageAnalysisStoreIntegrationTest {
         assertThat(first.acquired()).isTrue();
         assertThat(store.claim(key(),"a".repeat(64)).acquired()).isFalse();
         store.finish(key(),first.result().id(),"✅ Correct");
-        assertThat(current()).extracting(KolinPageAnalysisStore.Result::text).containsExactly("✅ Correct");
+        assertThat(current()).extracting(KolinPageAnalysisStore.SavedResult::text).containsExactly("✅ Correct");
 
         write(teacher,teacher,AnnotationOperationType.ADD,0);
         assertThat(candidates()).isEmpty();
-        assertThat(current()).extracting(KolinPageAnalysisStore.Result::id).containsExactly(first.result().id());
+        assertThat(current()).extracting(KolinPageAnalysisStore.SavedResult::id).containsExactly(first.result().id());
         assertThat(store.claim(key(),"b".repeat(64)).acquired()).isFalse();
 
         write(pupil,pupil,AnnotationOperationType.ADD,0);
-        assertThat(current()).isEmpty();
+        assertThat(current()).hasSize(1);
+        assertThat(current().get(0).isCurrent()).isFalse();
+        assertThat(current(1)).hasSize(1); // saved receipt survives a workbook/PDF version change
+        assertThat(current(1).get(0).isCurrent()).isFalse();
         assertThat(candidates()).isEmpty();
         agePupilInk();
         assertThat(candidates()).hasSize(1);
@@ -109,7 +115,8 @@ class KolinPageAnalysisStoreIntegrationTest {
         assertThat(current()).extracting(KolinPageAnalysisStore.Result::text).containsExactly("❌ Incorrect");
 
         write(pupil,pupil,AnnotationOperationType.CLEAR_LAYER,60);
-        assertThat(current()).isEmpty();
+        assertThat(current()).hasSize(2);
+        assertThat(current()).allMatch(result -> !result.isCurrent());
         assertThat(candidates()).isEmpty();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM kolyn_page_analyses",Integer.class)).isEqualTo(2);
     }
