@@ -66,6 +66,85 @@ public class KolinPageAnalysisStore {
     private final JdbcTemplate jdbc;
 
     public KolinPageAnalysisStore(JdbcTemplate jdbc) { this.jdbc = jdbc; }
+    public record UsageTotals(long checks,long uniqueRevisions,long aiRequests,long cacheHits,long inProgressReuses,
+                              long failedReuses,long inputTokens,long cachedInputTokens,long outputTokens,
+                              long reasoningTokens,java.math.BigDecimal costUsd,boolean costComplete) {}
+    public record PageUsage(UUID studentId,String studentName,String boardId,int pageNumber,long checks,
+                            long uniqueRevisions,long aiRequests,long cacheHits,long inputTokens,long outputTokens,
+                            java.math.BigDecimal costUsd,boolean costComplete) {}
+
+    @Transactional
+    public UUID startUsage(Key key,UUID analysisId,String model,String eventType) {
+        UUID id=UUID.randomUUID();
+        jdbc.update("""
+          INSERT INTO kolyn_page_analysis_usage_events
+          (id,analysis_id,class_id,teacher_id,student_id,board_id,page_number,pupil_ink_revision,event_type,state,model_name)
+          VALUES (?,?,?,?,?,?,?,?,?,'STARTED',?)
+          """,id,analysisId,key.classId(),key.teacherId(),key.studentId(),key.boardId(),key.pageNumber(),key.revision(),eventType,model);
+        return id;
+    }
+
+    @Transactional
+    public void finishUsage(UUID id,String state,String responseId,Long input,Long cached,Long output,Long reasoning,
+            java.math.BigDecimal inputPrice,java.math.BigDecimal cachedPrice,java.math.BigDecimal outputPrice) {
+        java.math.BigDecimal cost=null;
+        if(input!=null && output!=null && inputPrice!=null && cachedPrice!=null && outputPrice!=null) {
+            long cache=Math.min(input,cached==null?0L:cached);
+            cost=java.math.BigDecimal.valueOf(input-cache).multiply(inputPrice)
+                .add(java.math.BigDecimal.valueOf(cache).multiply(cachedPrice))
+                .add(java.math.BigDecimal.valueOf(output).multiply(outputPrice))
+                .divide(java.math.BigDecimal.valueOf(1_000_000),10,java.math.RoundingMode.HALF_UP);
+        }
+        jdbc.update("""
+          UPDATE kolyn_page_analysis_usage_events SET state=?,response_id=?,input_tokens=?,cached_input_tokens=?,
+          output_tokens=?,reasoning_tokens=?,input_price_usd_per_million=?,cached_input_price_usd_per_million=?,
+          output_price_usd_per_million=?,cost_usd=?,finished_at=now() WHERE id=?
+          """,state,responseId,input,cached,output,reasoning,inputPrice,cachedPrice,outputPrice,cost,id);
+    }
+
+    @Transactional(readOnly=true)
+    public UsageTotals usageTotals(UUID classId,UUID teacherId) {
+        var row=jdbc.queryForMap("""
+          SELECT count(*) FILTER(WHERE event_type='AI_REQUEST') checks,
+          count(DISTINCT(student_id,board_id,page_number,pupil_ink_revision)) unique_revisions,
+          count(*) FILTER(WHERE event_type='AI_REQUEST') ai_requests,
+          count(*) FILTER(WHERE event_type='CACHE_HIT') cache_hits,
+          count(*) FILTER(WHERE event_type='IN_PROGRESS_REUSE') in_progress_reuses,
+          count(*) FILTER(WHERE event_type='FAILED_REUSE') failed_reuses,
+          COALESCE(sum(input_tokens),0) input_tokens,COALESCE(sum(cached_input_tokens),0) cached_input_tokens,
+          COALESCE(sum(output_tokens),0) output_tokens,COALESCE(sum(reasoning_tokens),0) reasoning_tokens,
+          sum(cost_usd) cost_usd,
+          COALESCE(bool_and(state='SUCCEEDED' AND cost_usd IS NOT NULL) FILTER(WHERE event_type='AI_REQUEST'),false) cost_complete
+          FROM kolyn_page_analysis_usage_events WHERE class_id=? AND teacher_id=?
+          """,classId,teacherId);
+        return new UsageTotals(n(row,"checks"),n(row,"unique_revisions"),n(row,"ai_requests"),n(row,"cache_hits"),
+          n(row,"in_progress_reuses"),n(row,"failed_reuses"),n(row,"input_tokens"),n(row,"cached_input_tokens"),
+          n(row,"output_tokens"),n(row,"reasoning_tokens"),(java.math.BigDecimal)row.get("cost_usd"),
+          Boolean.TRUE.equals(row.get("cost_complete")));
+    }
+    @Transactional(readOnly=true)
+    public List<PageUsage> pageUsage(UUID classId,UUID teacherId) {
+        return jdbc.query("""
+          SELECT e.student_id,u.name student_name,e.board_id,e.page_number,
+          count(*) FILTER(WHERE e.event_type='AI_REQUEST') checks,
+          count(DISTINCT e.pupil_ink_revision) unique_revisions,
+          count(*) FILTER(WHERE e.event_type='AI_REQUEST') ai_requests,
+          count(*) FILTER(WHERE e.event_type='CACHE_HIT') cache_hits,
+          COALESCE(sum(e.input_tokens),0) input_tokens,COALESCE(sum(e.output_tokens),0) output_tokens,
+          sum(e.cost_usd) cost_usd,
+          COALESCE(bool_and(e.state='SUCCEEDED' AND e.cost_usd IS NOT NULL) FILTER(WHERE e.event_type='AI_REQUEST'),false) cost_complete
+          FROM kolyn_page_analysis_usage_events e JOIN users u ON u.id=e.student_id
+          WHERE e.class_id=? AND e.teacher_id=? GROUP BY e.student_id,u.name,e.board_id,e.page_number
+          ORDER BY u.name,e.board_id,e.page_number
+          """,(rs,i)->new PageUsage(rs.getObject("student_id",UUID.class),rs.getString("student_name"),
+          rs.getString("board_id"),rs.getInt("page_number"),rs.getLong("checks"),rs.getLong("unique_revisions"),
+          rs.getLong("ai_requests"),rs.getLong("cache_hits"),rs.getLong("input_tokens"),rs.getLong("output_tokens"),
+          rs.getBigDecimal("cost_usd"),rs.getBoolean("cost_complete")),classId,teacherId);
+    }
+    private static long n(java.util.Map<String,Object> row,String key) {
+        Object value=row.get(key); return value instanceof Number number?number.longValue():0L;
+    }
+
 
     /**
      * A page's pupil-layer version changes only when its own layer changes or
