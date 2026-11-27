@@ -114,6 +114,22 @@ class KolinPageAnalysisServiceTest {
         verifyNoInteractions(store,ai);
     }
 
+    @Test void savedHistoryIsLoadedFromLegacyAndAssignedWorkbookBoards() {
+        String workbook=PersonalBoard.workbookTargetIdFor(pupil.getId());
+        when(documents.workbookVersion(host,room.getId(),workbook)).thenReturn(4L);
+        when(documents.workbookVersion(host,room.getId(),board)).thenReturn(2L);
+        when(documents.workbookVersion(host,room.getId(),"board-1")).thenReturn(7L);
+        var legacy=savedReceipt("READY","legacy saved feedback");
+        var assigned=new KolinPageAnalysisStore.SavedResult(UUID.randomUUID(),pupil.getId(),workbook,
+                1,4,0,5,"READY","assigned workbook feedback",null,now.plusSeconds(1),now,true);
+        when(store.current(room.getId(),host.id(),pupil.getId(),workbook,4L,0L)).thenReturn(List.of(assigned));
+        when(store.current(room.getId(),host.id(),pupil.getId(),board,2L,7L)).thenReturn(List.of(legacy));
+
+        var results=service.current(host,room.getId(),pupil.getId());
+
+        assertThat(results).containsExactly(assigned,legacy);
+    }
+
     @Test void textContextIncludesOnlyReadyReceiptsAndReportsLimits() {
         var context=new HashMap<String,Object>();
         assertThat(KolinChatService.includePageAnalyses(context,List.of(savedReceipt("RUNNING",null),savedReceipt("READY","saved facts")))).isTrue();
