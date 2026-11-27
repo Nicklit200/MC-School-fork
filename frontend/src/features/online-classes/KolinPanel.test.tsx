@@ -11,10 +11,10 @@ vi.mock('../../api/kolin', async importOriginal => ({ ...await importOriginal<ty
   kolinApi: { status: vi.fn(), send: vi.fn(), worksheetPreview: vi.fn(), worksheetPdf: vi.fn(), appendWorksheet: vi.fn() } }));
 const transcriptContext: KolinTranscriptContext = { state: 'included', segmentCount: 12, truncated: true,
   latestSegmentAt: '2026-11-07T15:45:00Z', fromMs: 120000, toMs: 525000, transcriptionActive: false };
-function Harness({ currentWorkbookPage }: { currentWorkbookPage?: number } = {}) {
+function Harness({ currentWorkbookPage, pageReview = false }: { currentWorkbookPage?: number; pageReview?: boolean } = {}) {
   const chat = useKolinChat('class-1', 'teacher', true);
   return <I18nProvider><button onClick={chat.toggle}>Kolyn</button>
-    {chat.open && <KolinPanel chat={chat} context={{ targetType: 'student', studentId: 'alice',
+    {chat.open && <KolinPanel chat={chat} automaticPageAnalysisEnabled={pageReview} context={{ targetType: 'student', studentId: 'alice',
       ...(currentWorkbookPage !== undefined ? { currentWorkbookPage } : {}) }} />}
   </I18nProvider>;
 }
@@ -25,6 +25,15 @@ beforeEach(() => {
 });
 
 describe('Kolyn text panel', () => {
+  it('does not show internal accounting even when page checks are enabled', async () => {
+    render(<Harness pageReview />);
+    await userEvent.click(screen.getByRole('button', { name: 'Kolyn' }));
+    expect(screen.getByRole('complementary', { name: 'Kolyn' })).toBeInTheDocument();
+    expect(screen.queryByText('Статистика проверок')).not.toBeInTheDocument();
+    expect(screen.queryByText('Стоимость')).not.toBeInTheDocument();
+    expect(screen.getByText(/Использую сохранённые проверки листов/)).toBeInTheDocument();
+  });
+
   it('sends Enter, keeps Shift+Enter as a newline and retains history after closing', async () => {
     render(<Harness />);
     await userEvent.click(screen.getByRole('button', { name: 'Kolyn' }));

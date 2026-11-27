@@ -145,6 +145,35 @@ public class KolinPageAnalysisStore {
           rs.getLong("ai_requests"),rs.getLong("ai_responses"),rs.getLong("cache_hits"),rs.getLong("input_tokens"),rs.getLong("output_tokens"),
           rs.getBigDecimal("cost_usd"),rs.getBoolean("cost_complete")),classId,teacherId);
     }
+    public record UsageLesson(UUID classId,UUID teacherId,String teacherName,String title,Instant scheduledStartAt,
+                              long checks,long uniqueRevisions,long aiRequests,long aiResponses,long cacheHits,
+                              long inputTokens,long outputTokens,java.math.BigDecimal costUsd,boolean costComplete) {}
+
+    /** Admin reporting only. List up to 500 recent lessons with recorded usage. */
+    @Transactional(readOnly=true)
+    public List<UsageLesson> usageLessons(Instant from) {
+        return jdbc.query("""
+          SELECT e.class_id,e.teacher_id,u.full_name teacher_name,c.title,c.scheduled_start_at,
+          count(*) checks,
+          count(DISTINCT(e.student_id,e.board_id,e.page_number,e.pupil_ink_revision)) unique_revisions,
+          count(*) FILTER(WHERE e.event_type='AI_REQUEST') ai_requests,
+          count(*) FILTER(WHERE e.event_type='AI_REQUEST' AND e.response_id IS NOT NULL) ai_responses,
+          count(*) FILTER(WHERE e.event_type='CACHE_HIT') cache_hits,
+          COALESCE(sum(e.input_tokens),0) input_tokens,COALESCE(sum(e.output_tokens),0) output_tokens,
+          CASE WHEN count(*) FILTER(WHERE e.event_type='AI_REQUEST')=0 THEN 0::numeric ELSE sum(e.cost_usd) END cost_usd,
+          COALESCE(bool_and(e.cost_usd IS NOT NULL) FILTER(WHERE e.event_type='AI_REQUEST'),true) cost_complete
+          FROM kolyn_page_analysis_usage_events e
+          JOIN online_classes c ON c.id=e.class_id
+          JOIN users u ON u.id=e.teacher_id
+          WHERE c.scheduled_start_at>=?
+          GROUP BY e.class_id,e.teacher_id,u.full_name,c.title,c.scheduled_start_at
+          ORDER BY c.scheduled_start_at DESC,e.class_id,e.teacher_id LIMIT 500
+          """,(rs,i)->new UsageLesson(rs.getObject("class_id",UUID.class),rs.getObject("teacher_id",UUID.class),
+          rs.getString("teacher_name"),rs.getString("title"),rs.getTimestamp("scheduled_start_at").toInstant(),
+          rs.getLong("checks"),rs.getLong("unique_revisions"),rs.getLong("ai_requests"),rs.getLong("ai_responses"),
+          rs.getLong("cache_hits"),rs.getLong("input_tokens"),rs.getLong("output_tokens"),rs.getBigDecimal("cost_usd"),
+          rs.getBoolean("cost_complete")),java.sql.Timestamp.from(from));
+    }
     private static long n(java.util.Map<String,Object> row,String key) {
         Object value=row.get(key); return value instanceof Number number?number.longValue():0L;
     }

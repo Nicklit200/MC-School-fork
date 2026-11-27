@@ -3,6 +3,7 @@ import { loadRouteModule } from './lib/routeModuleRecovery';
 import { PageLoading, RouteErrorBoundary } from './components/RouteRecovery';
 import { AdminStoryTemplatesPage } from './pages/admin/AdminStoryTemplatesPage';
 import { LearningTimeAdminPage } from './pages/admin/LearningTimeAdminPage';
+import { AdminKolinUsagePage } from './pages/admin/AdminKolinUsagePage';
 import { LearningTimeStudentPage } from './pages/admin/LearningTimeStudentPage';
 import { SkillsPage } from './pages/SkillsPage';
 import { TeacherHelpCenterPage } from './pages/TeacherHelpCenterPage';
@@ -91,6 +92,7 @@ export function App() {
       <Route path="/admin/help" element={<ProtectedRoute role="ADMIN"><Layout><TeacherHelpCenterPage admin /></Layout></ProtectedRoute>} />
       <Route path="/teachers" element={<ProtectedRoute role="ADMIN"><Layout><TeachersPage /></Layout></ProtectedRoute>} />
       <Route path="/admin/learning-time" element={<ProtectedRoute role="ADMIN"><Layout><LearningTimeAdminPage /></Layout></ProtectedRoute>} />
+      <Route path="/admin/kolyn-usage" element={<ProtectedRoute role="ADMIN"><Layout><AdminKolinUsagePage /></Layout></ProtectedRoute>} />
       <Route path="/admin/learning-time/:studentId" element={<ProtectedRoute role="ADMIN"><Layout><LearningTimeStudentPage /></Layout></ProtectedRoute>} />
       <Route path="/admin/accounts" element={<ProtectedRoute role="ADMIN"><Layout><AdminAccountsPage /></Layout></ProtectedRoute>} />
       <Route path="/admin/lessons" element={<ProtectedRoute role="ADMIN"><Layout><AdminTeacherLessonsPage /></Layout></ProtectedRoute>} />

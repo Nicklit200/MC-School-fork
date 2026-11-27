@@ -46,11 +46,6 @@ public class KolinPageAnalysisController {
                 .body(service.manualCandidates(teacher,classId,studentId));
     }
 
-    @GetMapping("/usage")
-    public ResponseEntity<java.util.Map<String,Object>> usage(@AuthenticationPrincipal AuthenticatedUser teacher,@PathVariable UUID classId) {
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.usage(teacher,classId));
-    }
-
     @GetMapping
     public ResponseEntity<List<KolinPageAnalysisStore.SavedResult>> current(@AuthenticationPrincipal AuthenticatedUser teacher,
             @PathVariable UUID classId,@RequestParam UUID studentId) {
