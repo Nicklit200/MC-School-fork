@@ -32,7 +32,7 @@ export function ParentNotifications({ compact = false }: { compact?: boolean }) 
     const refresh=async () => {
       const [web,native]=await Promise.allSettled([
         api.push.status(),
-        api.mobilePush.status(),
+        api.mobilePush?.status?.() ?? Promise.resolve({registeredDevices:0,ready:false}),
       ]);
       if(active) setStatus({
         web:web.status==='fulfilled'?web.value:null,
