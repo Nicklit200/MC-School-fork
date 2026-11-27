@@ -120,7 +120,8 @@ export function KolinPanel({ chat, context, currentStudentName, allStudentsOverv
         <div className="kolin-usage__totals">
           <span>{de ? 'Prüfanfragen' : 'Запросы проверки'}: <b>{usage.totals.checks}</b></span>
           <span>{de ? 'Versionen' : 'Версии'}: <b>{usage.totals.uniqueRevisions}</b></span>
-          <span>AI: <b>{usage.totals.aiRequests}</b></span>
+          <span>{de ? 'KI-Aufrufe' : 'Вызовы ИИ'}: <b>{usage.totals.aiRequests}</b></span>
+          <span>{de ? 'KI-Antworten' : 'Ответы ИИ'}: <b>{usage.totals.aiResponses}</b></span>
           <span>{de ? 'Cache' : 'Кэш'}: <b>{usage.totals.cacheHits}</b></span>
           <span>{de ? 'Tokens' : 'Токены'}: <b>{usage.totals.inputTokens + usage.totals.outputTokens}</b></span>
           <span>{de ? 'Kosten' : 'Стоимость'}: <b>{formatCost(usage.totals.costUsd, usage.totals.costComplete)}</b></span>
@@ -128,14 +129,14 @@ export function KolinPanel({ chat, context, currentStudentName, allStudentsOverv
         {usage.pages.length > 0 && <details className="kolin-usage__details">
           <summary>{de ? 'Nach Schüler und Seite' : 'По ученикам и листам'}</summary>
           {[...usageStudents.entries()].map(([studentId,pages]) => {
-            const sum = (key: 'checks'|'uniqueRevisions'|'aiRequests'|'cacheHits'|'inputTokens'|'outputTokens') => pages.reduce((total,page) => total + page[key],0);
+            const sum = (key: 'checks'|'uniqueRevisions'|'aiRequests'|'aiResponses'|'cacheHits'|'inputTokens'|'outputTokens') => pages.reduce((total,page) => total + page[key],0);
             const costs = pages.map(page => page.costUsd).filter((value): value is number => value !== null);
             return <div className="kolin-usage__row" key={studentId}>
               <strong>{pages[0].studentName}</strong>
-              <small>{de ? 'Anfragen' : 'запросы'} {sum('checks')} · {de ? 'Versionen' : 'версии'} {sum('uniqueRevisions')} · AI {sum('aiRequests')} · {de ? 'Cache' : 'кэш'} {sum('cacheHits')} · {formatCost(costs.length ? costs.reduce((a,b) => a+b,0) : null, pages.every(page => page.costComplete))}</small>
+              <small>{de ? 'Anfragen' : 'запросы'} {sum('checks')} · {de ? 'Versionen' : 'версии'} {sum('uniqueRevisions')} · AI {sum('aiRequests')} ({de ? 'Antworten' : 'ответов'} {sum('aiResponses')}) · {de ? 'Cache' : 'кэш'} {sum('cacheHits')} · {formatCost(costs.length ? costs.reduce((a,b) => a+b,0) : null, pages.every(page => page.costComplete))}</small>
               {pages.map(page => <div className="kolin-usage__row" key={page.boardId + ':' + page.pageNumber}>
                 <span>{de ? 'Seite' : 'Лист'} {page.pageNumber}</span>
-                <small>{de ? 'Anfragen' : 'запросы'} {page.checks} · {de ? 'Versionen' : 'версии'} {page.uniqueRevisions} · AI {page.aiRequests} · {de ? 'Cache' : 'кэш'} {page.cacheHits} · {formatCost(page.costUsd,page.costComplete)}</small>
+                <small>{de ? 'Anfragen' : 'запросы'} {page.checks} · {de ? 'Versionen' : 'версии'} {page.uniqueRevisions} · AI {page.aiRequests} ({de ? 'Antworten' : 'ответов'} {page.aiResponses}) · {de ? 'Cache' : 'кэш'} {page.cacheHits} · {formatCost(page.costUsd,page.costComplete)}</small>
               </div>)}
             </div>;
           })}

@@ -75,7 +75,7 @@ export interface KolinPageUsageRow {
   pageNumber: number;
   checks: number;
   uniqueRevisions: number;
-  aiRequests: number;
+  aiRequests: number; aiResponses: number;
   cacheHits: number;
   inputTokens: number;
   outputTokens: number;
@@ -84,7 +84,7 @@ export interface KolinPageUsageRow {
 }
 export interface KolinPageUsageResponse {
   totals: {
-    checks: number; uniqueRevisions: number; aiRequests: number; cacheHits: number;
+    checks: number; uniqueRevisions: number; aiRequests: number; aiResponses: number; cacheHits: number;
     inProgressReuses: number; failedReuses: number; inputTokens: number;
     cachedInputTokens: number; outputTokens: number; reasoningTokens: number;
     costUsd: number | null; costComplete: boolean;

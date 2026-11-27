@@ -117,4 +117,49 @@ class KolinPageAnalysisStoreIntegrationTest {
         assertThat(candidates()).isEmpty();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM kolyn_page_analyses",Integer.class)).isEqualTo(2);
     }
+
+    @Test void usageCountsPaidRequestsAndCacheHitsByPupilRevisionWithoutLosingCosts(){
+        write(pupil,pupil,AnnotationOperationType.ADD);
+        var first=store.claim(key(),"a".repeat(64));
+        var call=store.startUsage(key(),first.result().id(),"model-alias","AI_REQUEST");
+        var normal=new java.math.BigDecimal("2");
+        var cached=new java.math.BigDecimal("0.5");
+        var output=new java.math.BigDecimal("8");
+        store.finishUsage(call,"SUCCEEDED","model-version","resp-test",1000L,200L,500L,100L,normal,cached,output);
+        store.finish(key(),first.result().id(),"review");
+        // A later failure saving the feedback must not erase confirmed provider charges.
+        store.finishUsage(call,"FAILED",null,null,null,null,null,null,normal,cached,output);
+        write(teacher,teacher,AnnotationOperationType.ADD);
+        var reused=store.claim(key(),"b".repeat(64));
+        assertThat(reused.acquired()).isFalse();
+        var hit=store.startUsage(key(),reused.result().id(),null,"CACHE_HIT");
+        store.finishUsage(hit,"REUSED",null,null,null,null,null,null,null,null,null);
+        var totals=store.usageTotals(room.getId(),teacher.getId());
+        assertThat(totals.checks()).isEqualTo(2);
+        assertThat(totals.uniqueRevisions()).isEqualTo(1);
+        assertThat(totals.aiRequests()).isEqualTo(1);
+        assertThat(totals.aiResponses()).isEqualTo(1);
+        assertThat(totals.cacheHits()).isEqualTo(1);
+        assertThat(totals.inputTokens()).isEqualTo(1000);
+        assertThat(totals.outputTokens()).isEqualTo(500);
+        assertThat(totals.costUsd()).isEqualByComparingTo("0.0057");
+        assertThat(totals.costComplete()).isTrue();
+        assertThat(store.pageUsage(room.getId(),teacher.getId())).singleElement().satisfies(row -> {
+            assertThat(row.studentName()).isEqualTo("Pupil");
+            assertThat(row.pageNumber()).isEqualTo(1);
+            assertThat(row.uniqueRevisions()).isEqualTo(1);
+            assertThat(row.costUsd()).isEqualByComparingTo("0.0057");
+        });
+        write(pupil,pupil,AnnotationOperationType.ADD);
+        var second=store.claim(key(),"c".repeat(64));
+        var pending=store.startUsage(key(),second.result().id(),"model-alias","AI_REQUEST");
+        store.finishUsage(pending,"FAILED",null,null,null,null,null,null,normal,cached,output);
+        var incomplete=store.usageTotals(room.getId(),teacher.getId());
+        assertThat(incomplete.uniqueRevisions()).isEqualTo(2);
+        assertThat(incomplete.aiRequests()).isEqualTo(2);
+        assertThat(incomplete.aiResponses()).isEqualTo(1);
+        assertThat(incomplete.costComplete()).isFalse();
+        assertThat(incomplete.costUsd()).isEqualByComparingTo("0.0057");
+        assertThat(store.usageTotals(room.getId(),UUID.randomUUID()).checks()).isZero();
+    }
 }
