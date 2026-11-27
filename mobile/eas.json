@@ -15,10 +15,17 @@
       }
     },
     "production": {
+      "autoIncrement": true,
+      "channel": "production"
+    },
+    "testflight": {
+      "distribution": "store",
+      "channel": "production",
       "autoIncrement": true
     }
   },
   "submit": {
-    "production": {}
+    "production": {},
+    "testflight": {}
   }
 }
