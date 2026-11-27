@@ -2,6 +2,7 @@ package com.mcschool.flashcard.liveclasses;
 
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.lessons.AiLessonPilotService;
+import com.mcschool.flashcard.users.Role;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -28,9 +29,21 @@ public class KolinPageAnalysisService {
         this.store=store; this.ai=ai; this.mapper=mapper;
     }
 
-    /** Fail-closed rollout: only the configured teacher may start automatic paid reviews. */
+    /**
+     * Fail-closed rollout. Configure one teacher UUID, a comma/semicolon/space-separated
+     * allowlist, or "*" to enable automatic page reviews for every authenticated teacher.
+     * Students, parents, admins, and callers without an identity are never enabled.
+     */
     public boolean enabledFor(AuthenticatedUser teacher) {
-        return teacher!=null && teacher.id()!=null && teacher.id().toString().equals(pilotTeacherId);
+        if (teacher==null || teacher.id()==null || teacher.role()!=Role.TEACHER) return false;
+        String configured=pilotTeacherId==null?"":pilotTeacherId.trim();
+        if (configured.isEmpty()) return false;
+        if ("*".equals(configured)) return true;
+        String id=teacher.id().toString();
+        for (String allowed:configured.split("[,;\\s]+")) {
+            if (id.equals(allowed.trim())) return true;
+        }
+        return false;
     }
 
     public boolean enabled(AuthenticatedUser teacher, UUID classId) {

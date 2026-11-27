@@ -48,6 +48,30 @@ class KolinPageAnalysisServiceTest {
         when(ai.isConfigured()).thenReturn(true);
     }
 
+    @Test void wildcardEnablesEveryTeacherButNeverStudentsOrParents() {
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"pilotTeacherId","*");
+        var otherTeacher=User.activeTeacher("Other","other@example.test","other","hash");
+        var otherHost=new AuthenticatedUser(otherTeacher.getId(),otherTeacher.getEmail(),Role.TEACHER);
+        var studentCaller=new AuthenticatedUser(pupil.getId(),"pupil@example.test",Role.STUDENT);
+        var parentCaller=new AuthenticatedUser(UUID.randomUUID(),"parent@example.test",Role.PARENT);
+        assertThat(service.enabledFor(host)).isTrue();
+        assertThat(service.enabledFor(otherHost)).isTrue();
+        assertThat(service.enabledFor(studentCaller)).isFalse();
+        assertThat(service.enabledFor(parentCaller)).isFalse();
+        assertThat(service.enabledFor(null)).isFalse();
+    }
+
+    @Test void commaSeparatedAllowlistEnablesOnlyListedTeachers() {
+        var otherTeacher=User.activeTeacher("Other","other@example.test","other","hash");
+        var otherHost=new AuthenticatedUser(otherTeacher.getId(),otherTeacher.getEmail(),Role.TEACHER);
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"pilotTeacherId",
+                host.id()+","+otherHost.id());
+        assertThat(service.enabledFor(host)).isTrue();
+        assertThat(service.enabledFor(otherHost)).isTrue();
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"pilotTeacherId",host.id().toString());
+        assertThat(service.enabledFor(otherHost)).isFalse();
+    }
+
     @Test void duplicateRevisionReturnsReceiptWithoutVision() {
         var ready=receipt("READY","Found an error");
         when(store.claim(key,metadata.imageSha256())).thenReturn(new KolinPageAnalysisStore.Claim(false,ready));

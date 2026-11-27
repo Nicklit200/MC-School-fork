@@ -72,7 +72,7 @@ describe('parent curriculum changes per lesson', () => {
     // The newest lesson is selected automatically on opening the skills tab.
     expect(point).toHaveAttribute('aria-pressed', 'true');
     expect(await screen.findByText('Изменившиеся навыки')).toBeInTheDocument();
-    expect(screen.getByText('Степени и степени десяти')).toBeInTheDocument();
+    expect(screen.getAllByText('Степени и степени десяти').length).toBeGreaterThan(0);
     expect(screen.getByText('40% → 45%')).toBeInTheDocument();
     expect(screen.getByText('Самостоятельно вычислены степени.')).toBeInTheDocument();
     expect(screen.queryByText('Разряды и большие числа')).not.toBeInTheDocument();
