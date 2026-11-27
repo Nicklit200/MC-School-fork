@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "Mindcrafti",
+    "slug": "mindcrafti-mobile",
+    "owner": "mindcraftide",
+    "version": "0.1.0",
+    "orientation": "default",
+    "scheme": "mindcrafti",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "de.mindcrafti.school",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Mindcrafti uses the camera for live lessons and teacher video.",
+        "NSMicrophoneUsageDescription": "Mindcrafti uses the microphone so teachers and students can speak during live lessons."
+      }
+    },
+    "android": {
+      "package": "de.mindcrafti.school",
+      "permissions": [
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "plugins": [
+      "expo-notifications",
+      "expo-secure-store"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "86db5ac5-4823-4da9-a4e9-4646d2e7722a"
+      }
+    }
+  }
+}
