@@ -3,6 +3,10 @@ package com.mcschool.flashcard.lessons;
 import com.mcschool.flashcard.auth.AuthenticatedUser;
 import com.mcschool.flashcard.common.ResourceNotFoundException;
 import com.mcschool.flashcard.liveclasses.OnlineClass;
+import com.mcschool.flashcard.liveclasses.JoinRequestState;
+import com.mcschool.flashcard.liveclasses.OnlineClassJoinRequestRepository;
+import com.mcschool.flashcard.liveclasses.OnlineClassParticipant;
+import com.mcschool.flashcard.liveclasses.OnlineClassParticipantRepository;
 import com.mcschool.flashcard.liveclasses.OnlineClassRepository;
 import com.mcschool.flashcard.liveclasses.OnlineClassStatus;
 import com.mcschool.flashcard.users.Role;
@@ -34,12 +38,18 @@ public class LessonParticipantsService {
     private final LessonHistoryRepository history;
     private final UserRepository users;
     private final OnlineClassRepository rooms;
+    private final OnlineClassParticipantRepository roomParticipants;
+    private final OnlineClassJoinRequestRepository joinRequests;
 
     public LessonParticipantsService(LessonHistoryRepository history, UserRepository users,
-                                     OnlineClassRepository rooms) {
+                                     OnlineClassRepository rooms,
+                                     OnlineClassParticipantRepository roomParticipants,
+                                     OnlineClassJoinRequestRepository joinRequests) {
         this.history = history;
         this.users = users;
         this.rooms = rooms;
+        this.roomParticipants = roomParticipants;
+        this.joinRequests = joinRequests;
     }
 
     public record Participant(UUID studentId, String studentName) {}
@@ -92,11 +102,14 @@ public class LessonParticipantsService {
     @Transactional
     public List<Participant> remove(AuthenticatedUser teacher, String eventId, UUID studentId) {
         requireTeacher(teacher);
-        LessonHistoryEntry lesson = editable(teacher.id(), eventId);
+        LessonHistoryEntry lesson = history.findLockedByTeacherIdAndEventId(teacher.id(), eventId)
+                .orElseThrow(() -> new ResourceNotFoundException("Lesson not found"));
+        List<OnlineClass> lessonRooms = editableRooms(teacher.id(), eventId, lesson);
         Set<UUID> roster = new LinkedHashSet<>(lesson.toResponse().participantStudentIds());
         if (roster.remove(studentId)) {
             lesson.replaceParticipants(new ArrayList<>(roster));
             history.save(lesson);
+            revokePendingRoomAccess(lessonRooms, studentId, Instant.now());
             log.info("Lesson participant removed teacher={} event={} student={}", teacher.id(), eventId, studentId);
         }
         return list(teacher, eventId);
@@ -112,10 +125,19 @@ public class LessonParticipantsService {
         requireStudent(teacher.id(), studentId);
         // Stable lock order prevents opposite transfers from deadlocking.
         boolean sourceFirst = sourceEventId.compareTo(targetEventId) < 0;
-        LessonHistoryEntry first = editable(teacher.id(), sourceFirst ? sourceEventId : targetEventId);
-        LessonHistoryEntry second = editable(teacher.id(), sourceFirst ? targetEventId : sourceEventId);
+        LessonHistoryEntry first = history.findLockedByTeacherIdAndEventId(
+                        teacher.id(), sourceFirst ? sourceEventId : targetEventId)
+                .orElseThrow(() -> new ResourceNotFoundException("Lesson not found"));
+        LessonHistoryEntry second = history.findLockedByTeacherIdAndEventId(
+                        teacher.id(), sourceFirst ? targetEventId : sourceEventId)
+                .orElseThrow(() -> new ResourceNotFoundException("Lesson not found"));
+        List<OnlineClass> firstRooms = editableRooms(
+                teacher.id(), sourceFirst ? sourceEventId : targetEventId, first);
+        List<OnlineClass> secondRooms = editableRooms(
+                teacher.id(), sourceFirst ? targetEventId : sourceEventId, second);
         LessonHistoryEntry source = sourceFirst ? first : second;
         LessonHistoryEntry target = sourceFirst ? second : first;
+        List<OnlineClass> sourceRooms = sourceFirst ? firstRooms : secondRooms;
         Set<UUID> from = new LinkedHashSet<>(source.toResponse().participantStudentIds());
         Set<UUID> to = new LinkedHashSet<>(target.toResponse().participantStudentIds());
         if (!from.remove(studentId)) {
@@ -126,6 +148,7 @@ public class LessonParticipantsService {
         target.replaceParticipants(new ArrayList<>(to));
         history.save(source);
         history.save(target);
+        revokePendingRoomAccess(sourceRooms, studentId, Instant.now());
         log.info("Lesson participant transferred teacher={} student={} from={} to={}",
                 teacher.id(), studentId, sourceEventId, targetEventId);
     }
@@ -152,18 +175,59 @@ public class LessonParticipantsService {
         return lesson;
     }
 
-    private LessonHistoryEntry editable(UUID teacherId, String eventId) {
-        LessonHistoryEntry lesson = history.findLockedByTeacherIdAndEventId(teacherId, eventId)
-                .orElseThrow(() -> new ResourceNotFoundException("Lesson not found"));
-        // Never claim a pupil was removed from an already active LiveKit room.
-        if (!Instant.now().isBefore(lesson.getStartsAt())
-                || rooms.findAllByTeacherIdAndEventIdOrderByScheduledStartAtDesc(teacherId, eventId)
-                    .stream().anyMatch(room -> room.getStatus() != OnlineClassStatus.SCHEDULED
-                            && room.getStatus() != OnlineClassStatus.CANCELLED)) {
+    /**
+     * A classroom can be opened before its scheduled lesson time so the teacher can
+     * test the room and the waiting-room window can be prepared. That early LIVE
+     * state must not lock the occurrence roster when no pupil has ever received a
+     * connection. Once a pupil has received a connection, or the scheduled start
+     * has arrived, changing the roster could falsify attendance or leave a live
+     * participant in the room and is therefore rejected.
+     */
+    private List<OnlineClass> editableRooms(UUID teacherId, String eventId, LessonHistoryEntry lesson) {
+        Instant now = Instant.now();
+        if (!now.isBefore(lesson.getStartsAt())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Edit participants before the lesson opens; an active or completed room cannot be changed");
+                    "Edit participants before the scheduled lesson start");
         }
-        return lesson;
+
+        List<OnlineClass> found = rooms.findAllByTeacherIdAndEventIdOrderByScheduledStartAtDesc(teacherId, eventId);
+        // Lock every materialized room in a stable order so opening/joining a room
+        // cannot race with a roster edit.
+        List<OnlineClass> lockedRooms = found.stream()
+                .sorted(Comparator.comparing(room -> room.getId().toString()))
+                .map(room -> rooms.findForUpdate(room.getId()).orElse(room))
+                .toList();
+
+        for (OnlineClass room : lockedRooms) {
+            OnlineClassStatus status = room.getStatus();
+            if (status == OnlineClassStatus.SCHEDULED || status == OnlineClassStatus.CANCELLED) {
+                continue;
+            }
+            boolean preopenedEmptyRoom = (status == OnlineClassStatus.LOBBY_OPEN || status == OnlineClassStatus.LIVE)
+                    && room.getScheduledStartAt() != null
+                    && now.isBefore(room.getScheduledStartAt())
+                    && !hasStudentEverEntered(room);
+            if (!preopenedEmptyRoom) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Participants can only be changed before a pupil enters the classroom and before the scheduled start");
+            }
+        }
+        return lockedRooms;
+    }
+
+    private boolean hasStudentEverEntered(OnlineClass room) {
+        return roomParticipants.findAllByOnlineClassIdOrderByCreatedAtAsc(room.getId()).stream()
+                .anyMatch(participant -> !participant.isHost() && participant.getFirstJoinedAt() != null);
+    }
+
+    /** Revoke any not-yet-connected waiting-room access after removing this occurrence's roster entry. */
+    private void revokePendingRoomAccess(List<OnlineClass> lessonRooms, UUID studentId, Instant now) {
+        for (OnlineClass room : lessonRooms) {
+            roomParticipants.findByOnlineClassIdAndUserId(room.getId(), studentId)
+                    .ifPresent(OnlineClassParticipant::remove);
+            joinRequests.findByOnlineClassIdAndUserIdAndState(room.getId(), studentId, JoinRequestState.PENDING)
+                    .ifPresent(request -> request.cancel(now));
+        }
     }
 
     private LessonHistoryEntry requireLesson(UUID teacherId, String eventId) {
