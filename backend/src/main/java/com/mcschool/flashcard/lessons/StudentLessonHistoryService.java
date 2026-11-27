@@ -132,18 +132,19 @@ public class StudentLessonHistoryService {
         requireAssignedStudent(caller, studentId);
         requireAccessibleEntry(studentId, sourceTeacherId, eventId);
         String personalBoard = "personal-" + studentId;
+        String personalWorkbookBoard = "personal-workbook-" + studentId;
         String manualPersonalBoard = "manual-personal-" + studentId;
         return jdbc.query("""
                 SELECT id, board_id, filename, updated_at
                 FROM completed_lesson_documents
                 WHERE teacher_id = ? AND event_id = ?
-                  AND (board_id IN ('board-1', 'manual-shared') OR board_id IN (?, ?))
+                  AND (board_id IN ('board-1', 'manual-shared') OR board_id IN (?, ?, ?))
                 ORDER BY updated_at DESC
                 """,
                 (rs, rowNum) -> new com.mcschool.flashcard.lessons.dto.StudentLessonHistoryDocument(
                         rs.getObject("id", UUID.class), rs.getString("board_id"), rs.getString("filename"),
                         rs.getTimestamp("updated_at").toInstant().toString()),
-                sourceTeacherId, eventId, personalBoard, manualPersonalBoard);
+                sourceTeacherId, eventId, personalBoard, personalWorkbookBoard, manualPersonalBoard);
     }
 
     @Transactional(readOnly = true)
@@ -152,16 +153,17 @@ public class StudentLessonHistoryService {
         requireAssignedStudent(caller, studentId);
         requireAccessibleEntry(studentId, sourceTeacherId, eventId);
         String personalBoard = "personal-" + studentId;
+        String personalWorkbookBoard = "personal-workbook-" + studentId;
         String manualPersonalBoard = "manual-personal-" + studentId;
         return jdbc.query("""
                 SELECT filename, pdf
                 FROM completed_lesson_documents
                 WHERE id = ? AND teacher_id = ? AND event_id = ?
-                  AND (board_id IN ('board-1', 'manual-shared') OR board_id IN (?, ?))
+                  AND (board_id IN ('board-1', 'manual-shared') OR board_id IN (?, ?, ?))
                 """, rs -> {
                     if (!rs.next()) return null;
                     return new PdfFile(safeDefault(rs.getString("filename"), "completed-lesson.pdf"), rs.getBytes("pdf"));
-                }, documentId, sourceTeacherId, eventId, personalBoard, manualPersonalBoard);
+                }, documentId, sourceTeacherId, eventId, personalBoard, personalWorkbookBoard, manualPersonalBoard);
     }
 
     private StudentLessonHistoryItem toItem(LessonHistoryEntry entry) {
