@@ -31,7 +31,7 @@ public class KolinPageAnalysisService {
 
     /**
      * Fail-closed rollout. Configure one teacher UUID, a comma/semicolon/space-separated
-     * allowlist, or "*" to enable automatic page reviews for every authenticated teacher.
+     * allowlist, or "*" to enable teacher-triggered page checks.
      * Students, parents, admins, and callers without an identity are never enabled.
      */
     public boolean enabledFor(AuthenticatedUser teacher) {
@@ -112,18 +112,26 @@ public class KolinPageAnalysisService {
                 .limit(500).toList();
     }
 
+    /** Legacy background-poll endpoint. It intentionally returns no candidates. */
     public List<KolinPageAnalysisStore.Candidate> candidates(AuthenticatedUser teacher, UUID classId) {
+        access.requireHost(teacher,classId);
+        return List.of();
+    }
+
+    /** Return only changed pages for the explicitly selected pupil. */
+    public List<KolinPageAnalysisStore.Candidate> manualCandidates(AuthenticatedUser teacher, UUID classId, UUID studentId) {
         var room=access.requireHost(teacher,classId);
-        if (!enabledFor(teacher) || room.getStatus()!=OnlineClassStatus.LIVE || !ai.isConfigured()) return List.of();
-        return roster.read(room).stream().flatMap(pupil-> {
-            UUID studentId=pupil.id();
-            String workbook=PersonalBoard.workbookTargetIdFor(studentId);
-            long privateVersion=documents.workbookVersion(teacher,classId,workbook);
-            String board=privateVersion>0?workbook:PersonalBoard.targetIdFor(studentId);
-            long version=privateVersion>0?privateVersion:documents.workbookVersion(teacher,classId,board);
-            long shared=privateVersion>0?0L:documents.workbookVersion(teacher,classId,"board-1");
-            return store.candidates(classId,teacher.id(),studentId,board,version,shared).stream();
-        }).limit(16).toList();
+        if (!enabledFor(teacher) || room.getStatus()!=OnlineClassStatus.LIVE || !ai.isConfigured())
+            throw KolinRequestException.reviewUnavailable();
+        requirePupil(room,studentId);
+
+        // Prefer the assigned workbook. Older pupils may still use the legacy personal board.
+        String workbook=PersonalBoard.workbookTargetIdFor(studentId);
+        long privateVersion=documents.workbookVersion(teacher,classId,workbook);
+        String board=privateVersion>0?workbook:PersonalBoard.targetIdFor(studentId);
+        long version=privateVersion>0?privateVersion:documents.workbookVersion(teacher,classId,board);
+        long shared=privateVersion>0?0L:documents.workbookVersion(teacher,classId,"board-1");
+        return store.candidates(classId,teacher.id(),studentId,board,version,shared);
     }
 
     private void requirePupil(OnlineClass room, UUID studentId) {
