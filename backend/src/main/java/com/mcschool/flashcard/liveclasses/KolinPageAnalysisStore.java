@@ -201,7 +201,7 @@ public class KolinPageAnalysisStore {
                    COALESCE(a.document_version=? AND a.shared_document_version=?
                        AND latest.sequence = a.pupil_ink_revision, false) AS is_current
             FROM kolyn_page_analyses a
-            JOIN online_class_annotation_documents doc ON doc.class_id=a.class_id
+            LEFT JOIN online_class_annotation_documents doc ON doc.class_id=a.class_id
               AND doc.target_type='WHITEBOARD' AND doc.target_id=a.board_id
               AND doc.page_index=a.page_number-1
             LEFT JOIN LATERAL (
