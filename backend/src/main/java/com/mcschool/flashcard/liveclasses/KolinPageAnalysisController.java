@@ -31,10 +31,19 @@ public class KolinPageAnalysisController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.analyze(teacher,classId,snapshot));
     }
 
+    /** Legacy background polling is disabled during the manual-check experiment. */
     @GetMapping("/candidates")
     public ResponseEntity<List<KolinPageAnalysisStore.Candidate>> candidates(@AuthenticationPrincipal AuthenticatedUser teacher,
             @PathVariable UUID classId) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.candidates(teacher,classId));
+    }
+
+    @GetMapping("/manual-candidates")
+    public ResponseEntity<List<KolinPageAnalysisStore.Candidate>> manualCandidates(
+            @AuthenticationPrincipal AuthenticatedUser teacher, @PathVariable UUID classId,
+            @RequestParam UUID studentId) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(service.manualCandidates(teacher,classId,studentId));
     }
 
     @GetMapping
