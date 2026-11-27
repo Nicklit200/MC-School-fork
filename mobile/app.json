@@ -9,7 +9,11 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "de.mindcrafti.school",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Mindcrafti uses the camera for live lessons and teacher video.",
+        "NSMicrophoneUsageDescription": "Mindcrafti uses the microphone so teachers and students can speak during live lessons."
+      }
     },
     "android": {
       "package": "de.mindcrafti.school",
