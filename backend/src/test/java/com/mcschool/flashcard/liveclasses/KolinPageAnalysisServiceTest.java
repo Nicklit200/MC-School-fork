@@ -145,6 +145,21 @@ class KolinPageAnalysisServiceTest {
         verifyNoInteractions(store,ai);
     }
 
+    @Test void manualCandidatesAreScopedToTheSelectedPupil() {
+        String workbook=PersonalBoard.workbookTargetIdFor(pupil.getId());
+        when(documents.workbookVersion(host,room.getId(),workbook)).thenReturn(0L);
+        when(documents.workbookVersion(host,room.getId(),board)).thenReturn(0L);
+        when(documents.workbookVersion(host,room.getId(),"board-1")).thenReturn(3L);
+        var candidate=new KolinPageAnalysisStore.Candidate(pupil.getId(),board,2,0,3,7);
+        when(store.candidates(room.getId(),host.id(),pupil.getId(),board,0L,3L)).thenReturn(List.of(candidate));
+
+        assertThat(service.manualCandidates(host,room.getId(),pupil.getId())).containsExactly(candidate);
+        assertThatThrownBy(()->service.manualCandidates(host,room.getId(),UUID.randomUUID()))
+                .isInstanceOf(KolinRequestException.class);
+        verify(store,times(1)).candidates(room.getId(),host.id(),pupil.getId(),board,0L,3L);
+        assertThat(service.candidates(host,room.getId())).isEmpty();
+    }
+
     @Test void keyRejectsOtherPupilsBoardAndSharedBoard() {
         for(String wrong:List.of("board-1",PersonalBoard.targetIdFor(UUID.randomUUID()))) {
             assertThatThrownBy(()->new KolinPageAnalysisStore.Key(room.getId(),host.id(),pupil.getId(),wrong,2,0,3,7))
