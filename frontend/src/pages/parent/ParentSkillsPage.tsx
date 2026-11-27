@@ -35,10 +35,37 @@ function ProgressGraph({ data, language, selectedId, onSelect }: {
   const width = Math.max(760, (lessons.length - 1) * 100 + 112);
   const left = 54;
   const right = width - 43;
-  const y = (value: number) => 182 - Math.max(0, Math.min(100, value)) * 1.45;
+  // Focus the vertical axis around the actual score range so small, real changes
+  // remain visible. The displayed axis bounds make the zoom explicit; the
+  // underlying percentages and stored mastery values are never transformed.
+  const assessedValues = lessons
+    .map(lesson => lesson.confirmedPercent)
+    .filter((value): value is number => value != null && Number.isFinite(value))
+    .map(value => Math.max(0, Math.min(100, value)));
+  const minScore = assessedValues.length ? Math.min(...assessedValues) : 0;
+  const maxScore = assessedValues.length ? Math.max(...assessedValues) : 100;
+  const scoreSpread = maxScore - minScore;
+  const useFullScale = scoreSpread >= 40;
+  const scalePadding = Math.max(2, scoreSpread * 0.2);
+  const scaleMin = useFullScale ? 0 : Math.max(0, Math.floor((minScore - scalePadding) / 5) * 5);
+  const scaleMax = useFullScale ? 100 : Math.min(100, Math.ceil((maxScore + scalePadding) / 5) * 5);
+  const plotTop = 48;
+  const plotBottom = 250;
+  const plotHeight = plotBottom - plotTop;
+  const scaleRange = Math.max(5, scaleMax - scaleMin);
+  const y = (value: number) => plotBottom -
+    ((Math.max(scaleMin, Math.min(scaleMax, value)) - scaleMin) / scaleRange) * plotHeight;
+  const axisTicks = Array.from({ length: 5 }, (_, index) =>
+    scaleMin + (scaleRange * index / 4));
+  const axisFormatter = new Intl.NumberFormat(language === 'DE' ? 'de-DE' : 'ru-RU', {
+    maximumFractionDigits: 1,
+  });
+  const scaleLabel = useFullScale
+    ? say(language, 'Полная шкала: 0–100%', 'Vollständige Skala: 0–100%')
+    : `${say(language, 'Увеличенный масштаб', 'Vergrößerter Maßstab')}: ${axisFormatter.format(scaleMin)}–${axisFormatter.format(scaleMax)}%`;
   const items = lessons.map((lesson, i) => ({
     ...lesson, x: lessons.length === 1 ? (left + right) / 2 : left + i * (right-left)/(lessons.length-1),
-    y: lesson.confirmedPercent == null ? 182 : y(lesson.confirmedPercent),
+    y: lesson.confirmedPercent == null ? plotBottom : y(lesson.confirmedPercent),
   }));
   // Do not draw an invented zero baseline for lessons with no assessed work.
   let path = '';
@@ -51,12 +78,15 @@ function ProgressGraph({ data, language, selectedId, onSelect }: {
   const select = (id: string) => onSelect(id);
   return <div ref={scrollRef} className="parent-progress__graph" role="region"
     aria-label={say(language, 'Выберите точку урока на графике', 'Unterrichtspunkt im Diagramm wählen')}>
-    <svg viewBox={`0 0 ${width} 230`} style={{ width, minWidth: '100%', maxWidth: 'none' }}
+    <div className="parent-progress__scale-note" aria-live="polite">{scaleLabel}</div>
+    <svg viewBox={`0 0 ${width} 310`} style={{ width, minWidth: '100%', maxWidth: 'none' }}
       aria-label={say(language, 'История прогресса по урокам', 'Lernfortschritt nach Unterricht')}
       role="img">
-      {[0,25,50,75,100].map(n => <g key={n}>
-        <line x1={left} x2={right} y1={y(n)} y2={y(n)} className="parent-progress__gridline"/>
-        <text x="40" y={y(n)+5} textAnchor="end" className="parent-progress__axis">{n}%</text>
+      {axisTicks.map((tick, index) => <g key={index}>
+        <line x1={left} x2={right} y1={y(tick)} y2={y(tick)} className="parent-progress__gridline"/>
+        <text x="40" y={y(tick)+5} textAnchor="end" className="parent-progress__axis">
+          {axisFormatter.format(Number(tick.toFixed(1)))}%
+        </text>
       </g>)}
       {path && <path d={path} className="parent-progress__line"/>}
       {items.map((point) => {
@@ -72,7 +102,7 @@ function ProgressGraph({ data, language, selectedId, onSelect }: {
               event.preventDefault(); select(point.lessonId);
             }
           }}>
-          {chosen && <line x1={point.x} x2={point.x} y1="36" y2="185"
+          {chosen && <line x1={point.x} x2={point.x} y1={plotTop} y2={plotBottom}
             className="parent-progress__selected-guide"/>}
           <circle cx={point.x} cy={point.y} r="17" className="parent-progress__hit-target"/>
           {improvementCount > 0 && <circle cx={point.x} cy={point.y} r="11.5"
@@ -87,7 +117,7 @@ function ProgressGraph({ data, language, selectedId, onSelect }: {
             {point.confirmedPercent == null ? '—' : percent(point.confirmedPercent)}
           </text>
           <text className={`parent-progress__point-date ${chosen ? 'parent-progress__point-date--active' : ''}`}
-            x={point.x} y="213" textAnchor="middle">
+            x={point.x} y="290" textAnchor="middle">
             {new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU',
               {day:'2-digit',month:'2-digit',timeZone:'Europe/Berlin'}).format(new Date(point.endedAt))}
           </text>
