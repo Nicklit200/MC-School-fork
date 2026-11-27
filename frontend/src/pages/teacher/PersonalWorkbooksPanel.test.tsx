@@ -32,9 +32,9 @@ const futureLesson: GroupLesson = {
 const mountWithRoster = (onChanged = vi.fn(async () => {})) =>
   render(<I18nProvider><PersonalWorkbooksPanel eventId="lesson-1"
     lesson={futureLesson} lessons={[futureLesson]} students={[
-      { id: 'alice', fullName: 'Анна' },
-      { id: 'bob', fullName: 'Борис' },
-      { id: 'sofia', fullName: 'София' },
+      { id: 'alice', fullName: 'Анна', status: 'ACTIVE' },
+      { id: 'bob', fullName: 'Борис', status: 'ACTIVE' },
+      { id: 'sofia', fullName: 'София', status: 'ACTIVE' },
     ] as any} onChanged={onChanged} /></I18nProvider>);
 
 beforeEach(() => {
