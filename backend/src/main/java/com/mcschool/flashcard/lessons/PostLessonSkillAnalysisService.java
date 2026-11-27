@@ -211,6 +211,14 @@ public class PostLessonSkillAnalysisService {
             speaker. Teacher dialogue is useful context but not proof of an independent answer.
             Be cautious about attributing marks on teacher-editable boards to the pupil.
             Provide at most 8 nonduplicate skills, chosen ONLY from exact supplied skill IDs.
+            Check every line of the supplied chronological transcript window, not
+            just the beginning. Contrast earlier mistakes and hinted attempts with
+            later responses to new examples for the same skill, and describe both
+            demonstrated progress and continuing errors with concrete timestamps.
+            A correct answer after teacher explanation indicates developing
+            understanding, NOT independent mastery. Do not label hinted answers
+            FIRST_TRY or INDEPENDENT. Never count the teacher's corrections as
+            student-solved examples.
             Each observation MUST cite a concrete page and calculation or a STUDENT transcript
             quotation with timestamp. Do not use the teacher's statements as student proof.
             "sourceBoardId" and "pageNumber" MUST identify the precise provided personal PDF
@@ -227,9 +235,13 @@ public class PostLessonSkillAnalysisService {
             Never change skill percentages yourself: the server applies its conservative
             evidence threshold and records idempotent audit history.
             Missing or uncertain evidence must leave previous percentages unchanged.
+            Real development after a hint deserves an evidence observation even when
+            it is insufficient to update the independently mastered percentage.
             Accuracy and no fabricated progress are more important than filling the map.
             Also return a short Russian lessonSummary (maximum 450 characters) describing
-            ONLY verified math TOPICS discussed during this pupil's actual lesson.
+            verified math TOPICS and specific changes in the pupil's observed
+            performance when both earlier and later answers support that comparison.
+            Include persistent errors. Never call a skill mastered without evidence.
             Do not mention other pupils, their work or private data. Do not invent
             comprehension, improvement, grades, mastered skills or student answers.
             If the transcript and PDFs contain no reliably verified math content,
