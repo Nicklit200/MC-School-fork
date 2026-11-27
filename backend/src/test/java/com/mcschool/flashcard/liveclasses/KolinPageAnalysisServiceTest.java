@@ -88,11 +88,12 @@ class KolinPageAnalysisServiceTest {
         var ready=receipt("READY","Found an error");
         when(store.claim(key,metadata.imageSha256()))
                 .thenReturn(new KolinPageAnalysisStore.Claim(true,running),new KolinPageAnalysisStore.Claim(false,ready));
-        when(ai.kolinReviewReply(anyString(),anyList(),anyString(),anyList())).thenReturn(ready.text());
+        when(ai.kolinReviewReplyWithUsage(anyString(),anyList(),anyString(),anyList()))
+                .thenReturn(new AiLessonPilotService.KolinModelReply(ready.text(),"gpt-test","resp-test",100L,20L,50L,30L,10L));
         when(store.finish(key,id,ready.text())).thenReturn(ready);
         assertThat(service.analyze(host,room.getId(),snapshot)).isEqualTo(ready);
         assertThat(service.analyze(host,room.getId(),snapshot)).isEqualTo(ready);
-        verify(ai,times(1)).kolinReviewReply(anyString(),anyList(),anyString(),anyList());
+        verify(ai,times(1)).kolinReviewReplyWithUsage(anyString(),anyList(),anyString(),anyList());
         verify(store,times(1)).finish(key,id,ready.text());
     }
 
