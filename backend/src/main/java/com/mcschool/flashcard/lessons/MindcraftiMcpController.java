@@ -2132,6 +2132,10 @@ public class MindcraftiMcpController {
             @SuppressWarnings("unchecked")
             Map<String,Object> candidate=objectMapper.readValue(source,Map.class);
             OwnerWorkbookPdfRenderService.validateDocument(candidate);
+            WorkbookContentService.validateMathExpressions(candidate);
+            if (!(candidate.get("qa") instanceof Map<?,?> qa)
+                    || !(qa.get("algebra") instanceof List<?> assertions) || assertions.isEmpty())
+                throw new IllegalArgumentException("Prepared lessonJson must include explicit qa.algebra assertions from its actual tasks and answers");
             normalized.put("lessonJson",source);normalized.put("contextToken",required(args,"contextToken"));
         }
         if(args.containsKey("homeworkDay") || args.containsKey("homeworkSeriesKey")) {
