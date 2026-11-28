@@ -322,10 +322,13 @@ export function ParentSkillsPage() {
   const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'graph' | 'tree'>('graph');
   const [focusedSkillId, setFocusedSkillId] = useState<string | null>(null);
+  // The chart and the tree are refreshed from one authenticated dashboard response.
+  const refreshCurrent = useRef<() => void>(() => {});
 
   const openSkillInTree = (skillId: string) => {
     setFocusedSkillId(skillId);
     setViewMode('tree');
+    refreshCurrent.current();
   };
   const selectTreeSkill = (skillId: string) => {
     setFocusedSkillId(skillId);
@@ -347,18 +350,45 @@ export function ParentSkillsPage() {
   useEffect(() => {
     if (!selected) return;
     let live = true;
+    let inFlight = false;
+    let initial = true;
     setLoading(true);setError('');setData(null);setSelectedLessonId(null);setFocusedSkillId(null);
-    parentApi.skills(selected).then(result => {
-      if (!live) return;
-      // Selecting the most recent completed class also works when switching children.
-      const mostRecent = [...(result.lessonProgress ?? [])]
-        .sort((a, b) => Date.parse(b.endedAt) - Date.parse(a.endedAt))[0];
-      setSelectedLessonId(mostRecent?.lessonId ?? null);
-      setData(result);
-    })
-      .catch(e => { if(live) setError(String(e?.message ?? e)); })
-      .finally(() => { if(live) setLoading(false); });
-    return () => { live = false; };
+    const refresh = () => {
+      if (!live || inFlight) return;
+      inFlight = true;
+      parentApi.skills(selected).then(result => {
+        if (!live) return;
+        // A single new snapshot updates the graph totals AND tree mastery values.
+        setData(result);
+        setError('');
+        const latest = [...(result.lessonProgress ?? [])]
+          .sort((a,b) => Date.parse(b.endedAt) - Date.parse(a.endedAt))[0];
+        setSelectedLessonId(previous => previous &&
+          result.lessonProgress.some(lesson => lesson.lessonId === previous)
+          ? previous : latest?.lessonId ?? null);
+      }).catch(e => {
+        // Do not discard earlier displayed skill values on a transient network error.
+        if (live && initial) setError(String(e?.message ?? e));
+      }).finally(() => {
+        inFlight = false;
+        if (live && initial) { initial = false; setLoading(false); }
+      });
+    };
+    refresh();
+    refreshCurrent.current = refresh;
+    const onReturn = () => {
+      if (document.visibilityState !== 'hidden') refresh();
+    };
+    const interval = window.setInterval(onReturn, 30_000);
+    window.addEventListener('focus', onReturn);
+    document.addEventListener('visibilitychange', onReturn);
+    return () => {
+      live = false;
+      refreshCurrent.current = () => {};
+      window.clearInterval(interval);
+      window.removeEventListener('focus', onReturn);
+      document.removeEventListener('visibilitychange', onReturn);
+    };
   }, [selected]);
 
   return <div className="stack parent-dashboard parent-progress">
@@ -383,12 +413,12 @@ export function ParentSkillsPage() {
           aria-label={say(language, 'Вид карты навыков', 'Kompetenzansicht')}>
           <button type="button" role="tab" aria-selected={viewMode === 'graph'}
             className={viewMode === 'graph' ? 'is-active' : ''}
-            onClick={() => setViewMode('graph')}>
+            onClick={() => { setViewMode('graph'); refreshCurrent.current(); }}>
             {say(language, 'График роста', 'Lernkurve')}
           </button>
           <button type="button" role="tab" aria-selected={viewMode === 'tree'}
             className={viewMode === 'tree' ? 'is-active' : ''}
-            onClick={() => setViewMode('tree')}>
+            onClick={() => { setViewMode('tree'); refreshCurrent.current(); }}>
             {say(language, 'Дерево навыков', 'Kompetenzbaum')}
           </button>
         </div>
