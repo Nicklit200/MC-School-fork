@@ -17,6 +17,16 @@ function ProgressGraph({ data, language, selectedId, onSelect }: {
   selectedId: string | null; onSelect: (lessonId: string) => void;
 }) {
   const lessons = data.lessonProgress ?? [];
+  const latestLesson = lessons.reduce<(typeof lessons)[number] | null>(
+    (last, lesson) => !last || Date.parse(lesson.endedAt) > Date.parse(last.endedAt)
+      ? lesson : last, null);
+  // A late workbook/homework review can update the canonical map AFTER the last
+  // lesson. Show that snapshot separately instead of falsifying a lesson point.
+  const currentScore = data.confirmedPercent;
+  const latestLessonScore = latestLesson?.confirmedPercent ?? null;
+  const hasCurrentSnapshot = currentScore != null && Number.isFinite(currentScore);
+  const needsCurrentMarker = hasCurrentSnapshot &&
+    (latestLessonScore == null || Math.abs(currentScore - latestLessonScore) >= 0.05);
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     // The newest lesson is automatically selected when the page opens.
@@ -29,18 +39,22 @@ function ProgressGraph({ data, language, selectedId, onSelect }: {
     }
   }, [lessons, selectedId]);
   if (!lessons.length) return <div className="parent-progress__chart-empty">
+    {hasCurrentSnapshot && <strong className="parent-progress__current-score">
+      {say(language, 'Текущая карта:', 'Aktueller Kompetenzstand:')} {percent(currentScore)}
+    </strong>}
     {say(language, 'Завершённые уроки появятся на графике после проведения занятий.',
       'Abgeschlossene Unterrichtsstunden erscheinen nach dem Unterricht.')}
   </div>;
-  const width = Math.max(760, (lessons.length - 1) * 100 + 112);
+  const width = Math.max(760, (lessons.length - 1 + (needsCurrentMarker ? 1 : 0)) * 100 + 112);
   const left = 54;
   const right = width - 43;
   // Focus the vertical axis around the actual score range so small, real changes
   // remain visible. The displayed axis bounds make the zoom explicit; the
   // underlying percentages and stored mastery values are never transformed.
-  const assessedValues = lessons
-    .map(lesson => lesson.confirmedPercent)
-    .filter((value): value is number => value != null && Number.isFinite(value))
+  const assessedValues = [
+    ...lessons.map(lesson => lesson.confirmedPercent),
+    ...(hasCurrentSnapshot ? [currentScore] : []),
+  ].filter((value): value is number => value != null && Number.isFinite(value))
     .map(value => Math.max(0, Math.min(100, value)));
   const minScore = assessedValues.length ? Math.min(...assessedValues) : 0;
   const maxScore = assessedValues.length ? Math.max(...assessedValues) : 100;
@@ -63,10 +77,15 @@ function ProgressGraph({ data, language, selectedId, onSelect }: {
   const scaleLabel = useFullScale
     ? say(language, 'Полная шкала: 0–100%', 'Vollständige Skala: 0–100%')
     : `${say(language, 'Увеличенный масштаб', 'Vergrößerter Maßstab')}: ${axisFormatter.format(scaleMin)}–${axisFormatter.format(scaleMax)}%`;
+  const chartStops = Math.max(1, lessons.length - 1 + (needsCurrentMarker ? 1 : 0));
   const items = lessons.map((lesson, i) => ({
-    ...lesson, x: lessons.length === 1 ? (left + right) / 2 : left + i * (right-left)/(lessons.length-1),
+    ...lesson, x: lessons.length === 1 && !needsCurrentMarker
+      ? (left + right) / 2 : left + i * (right-left)/chartStops,
     y: lesson.confirmedPercent == null ? plotBottom : y(lesson.confirmedPercent),
   }));
+  const latestItem = latestLesson && items.find(item => item.lessonId === latestLesson.lessonId);
+  const currentX = right;
+  const currentY = hasCurrentSnapshot ? y(currentScore) : plotBottom;
   // Do not draw an invented zero baseline for lessons with no assessed work.
   let path = '';
   let drawing = false;
@@ -78,7 +97,12 @@ function ProgressGraph({ data, language, selectedId, onSelect }: {
   const select = (id: string) => onSelect(id);
   return <div ref={scrollRef} className="parent-progress__graph" role="region"
     aria-label={say(language, 'Выберите точку урока на графике', 'Unterrichtspunkt im Diagramm wählen')}>
-    <div className="parent-progress__scale-note" aria-live="polite">{scaleLabel}</div>
+    <div className="parent-progress__graph-meta">
+      <span className="parent-progress__scale-note" aria-live="polite">{scaleLabel}</span>
+      {hasCurrentSnapshot && <strong className="parent-progress__current-score">
+        {say(language, 'Текущая карта:', 'Aktueller Kompetenzstand:')} {percent(currentScore)}
+      </strong>}
+    </div>
     <svg viewBox={`0 0 ${width} 310`} style={{ width, minWidth: '100%', maxWidth: 'none' }}
       aria-label={say(language, 'История прогресса по урокам', 'Lernfortschritt nach Unterricht')}
       role="img">
@@ -89,6 +113,9 @@ function ProgressGraph({ data, language, selectedId, onSelect }: {
         </text>
       </g>)}
       {path && <path d={path} className="parent-progress__line"/>}
+      {needsCurrentMarker && latestItem?.confirmedPercent != null && <line
+        x1={latestItem.x} y1={latestItem.y} x2={currentX} y2={currentY}
+        className="parent-progress__snapshot-connection"/>}
       {items.map((point) => {
         const chosen = selectedId === point.lessonId;
         const improvementCount = data.lessons.find(l=>l.id===point.lessonId)?.improvements?.length ?? 0;
@@ -126,6 +153,18 @@ function ProgressGraph({ data, language, selectedId, onSelect }: {
                   'belegter Fortschritt aus dem Transkript')}` : ''}</title>
         </g>;
       })}
+      {needsCurrentMarker && <g className="parent-progress__current-point"
+        role="img" aria-label={`${say(language, 'Текущая карта', 'Aktueller Stand')}: ${percent(currentScore)}`}>
+        <circle cx={currentX} cy={currentY} r="12" className="parent-progress__current-halo"/>
+        <circle cx={currentX} cy={currentY} r="7" className="parent-progress__current-dot"/>
+        <text x={currentX} y={Math.max(17, currentY - 21)} textAnchor="end"
+          className="parent-progress__point-value parent-progress__point-value--active">
+          {percent(currentScore)}
+        </text>
+        <text x={currentX} y="290" textAnchor="end" className="parent-progress__point-date parent-progress__point-date--active">
+          {say(language, 'Сейчас', 'Aktuell')}
+        </text>
+      </g>}
     </svg>
   </div>;
 }
