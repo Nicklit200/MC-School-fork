@@ -62,9 +62,13 @@ public class PostLessonHomeworkJobService {
     private final PostLessonHomeworkPilotAccess pilot;
     @org.springframework.beans.factory.annotation.Autowired
     private LessonParticipantsService lessonParticipants;
-    // Limit parallel jobs to three so the four-slot renderer retains capacity
-    // for interactive requests. Days in each job remain sequential for diversity.
-    private static final int MAX_PARALLEL_JOBS=3;
+    // At most two active groups, up to four pupils each. The content service
+    // independently limits provider requests to four and PDF renders to three.
+    static final int MAX_PARALLEL_JOBS=2;
+    static final int MAX_PUPILS_PER_JOB=4;
+    private final ExecutorService pupilWorkers=Executors.newFixedThreadPool(MAX_PARALLEL_JOBS*MAX_PUPILS_PER_JOB,r->{
+        Thread t=new Thread(r,"mindcrafti-homework-pupil");t.setDaemon(true);return t;
+    });
     private final ExecutorService worker=Executors.newFixedThreadPool(MAX_PARALLEL_JOBS,r->{
         Thread t=new Thread(r,"mindcrafti-post-lesson-homework");t.setDaemon(true);return t;
     });
@@ -204,13 +208,13 @@ public class PostLessonHomeworkJobService {
                     // Serialize claims across overlapping deployments; a fresh
                     // statement after the lock sees all committed earlier claims.
                     db.queryForList("SELECT pg_advisory_xact_lock(hashtext(?))","post-homework-queue-claim");
-                    db.update("UPDATE post_lesson_homework_jobs SET state='FAILED',failure_code='INTERRUPTED',finished_at=now(),updated_at=now() WHERE state='RUNNING' AND lease_until<now()");
+                    // Recover a lost worker once; persisted daily plans and PDFs survive.
+                    db.update("UPDATE post_lesson_homework_jobs SET state='QUEUED',worker_id=NULL,lease_until=NULL,interruption_retries=interruption_retries+1,updated_at=now() WHERE state='RUNNING' AND lease_until<now() AND interruption_retries<1");
+                    db.update("UPDATE post_lesson_homework_jobs SET state='FAILED',failure_code='INTERRUPTED',finished_at=now(),worker_id=NULL,lease_until=NULL,updated_at=now() WHERE state='RUNNING' AND lease_until<now()");
                     Integer running=db.queryForObject("SELECT count(*) FROM post_lesson_homework_jobs WHERE state='RUNNING'",Integer.class);
                     if(running!=null&&running>=MAX_PARALLEL_JOBS)return null;
-                    // Never run two jobs for the same teacher simultaneously.
-                    // Different teachers have separate lesson and student contexts.
-                    String query="SELECT q.* FROM post_lesson_homework_jobs q WHERE q.state='QUEUED' "
-                            +"AND NOT EXISTS (SELECT 1 FROM post_lesson_homework_jobs r WHERE r.state='RUNNING' AND r.teacher_id=q.teacher_id) ";
+                    // All jobs are class-scoped; publication locks individual pupil/day pairs.
+                    String query="SELECT q.* FROM post_lesson_homework_jobs q WHERE q.state='QUEUED' ";
                     List<Job> list=pilot.allTeachersEnabled()
                             ? db.query(query+"ORDER BY q.created_at FOR UPDATE OF q SKIP LOCKED LIMIT 1",this::row)
                             : db.query(query+"AND q.teacher_id=? ORDER BY q.created_at FOR UPDATE OF q SKIP LOCKED LIMIT 1",this::row,pilot.teacherId());
@@ -243,6 +247,10 @@ public class PostLessonHomeworkJobService {
         String code=PostLessonHomeworkFailure.code(failure);
         // A worker from an expired lease must not fail a newer retry or a published job.
         try {
+            if(worker.isShutdown()&&"INTERRUPTED".equals(code)){
+                int recovered=db.update("UPDATE post_lesson_homework_jobs SET state='QUEUED',failure_code=NULL,worker_id=NULL,lease_until=NULL,interruption_retries=interruption_retries+1,updated_at=now() WHERE id=? AND state='RUNNING' AND worker_id=? AND interruption_retries<1",jobId,workerId);
+                if(recovered==1)return;
+            }
             int changed=db.update("UPDATE post_lesson_homework_jobs SET state='FAILED',failure_code=?,worker_id=NULL,lease_until=NULL,finished_at=now(),updated_at=now() WHERE id=? AND state='RUNNING' AND worker_id=?",code,jobId,workerId);
             if(changed>0) safeNotify(jobId);
         } catch (RuntimeException persistenceFailure) {
@@ -295,35 +303,128 @@ public class PostLessonHomeworkJobService {
         int changed=db.update("UPDATE post_lesson_homework_jobs SET expected_files=?,updated_at=now() WHERE id=? AND state='RUNNING' AND worker_id=?",
                 eligible.size()*job.days(),job.id(),workerId);
         if(changed!=1)throw new IllegalStateException("HOMEWORK_JOB_LEASE_LOST");
-        for(Map<String,Object> pupil:eligible){
-            UUID id=UUID.fromString(String.valueOf(pupil.get("id")));
-            String name=String.valueOf(pupil.get("name"));
-            for(int day=1;day<=job.days();day++){
-                if(draftExists(job.id(),id,day))continue;
-                final int currentDay=day;
-                progress(job,PostLessonHomeworkStage.LESSON_EVIDENCE,currentDay);
-                Map<String,Object> evidence=tx.execute(st->studentEvidence(teacher,job,id,currentDay,individual.getOrDefault(id,"")));
-                // Previous days are loaded from durable drafts: retry/restart cannot forget
-                // math exercises already generated for this particular pupil.
-                evidence.put("previousGeneratedHomework",priorGeneratedHomework(job.id(),id));
-                PostLessonHomeworkContentService.GeneratedHomework generated=generator.makeWithReview(
-                        evidence,day,job.days(),name,stage->progress(job,stage,currentDay));
-                OwnerWorkbookPdfRenderService.StudioRender pair=generated.pdf();
-                progress(job,PostLessonHomeworkStage.PDF_STORAGE,currentDay);
-                UUID draft=UUID.randomUUID();
-                LocalDate date=job.startDate().plusDays(day-1);
-                tx.executeWithoutResult(st->{
-                    if(publishedOrRequireOwnership(job.id()))throw new IllegalStateException("HOMEWORK_JOB_LEASE_LOST");
-                    db.update("INSERT INTO post_lesson_homework_drafts (id,job_id,student_id,day_number,assignment_date,student_pdf,teacher_pdf,review_json) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(job_id,student_id,day_number) DO NOTHING",
-                            draft,job.id(),id,currentDay,date,pair.studentPdf(),pair.teacherPdf(),json.writeValueAsString(generated.review()));
-                    int count=db.queryForObject("SELECT count(*) FROM post_lesson_homework_drafts WHERE job_id=?",Integer.class,job.id());
-                    db.update("UPDATE post_lesson_homework_jobs SET generated_files=?,updated_at=now() WHERE id=?",count,job.id());
-                });
+        // Process all four pupils of a group concurrently. Join every submitted
+        // task even if a sibling fails so no task can write after job failure.
+        Exception firstFailure=null;
+        for(int offset=0;offset<eligible.size();offset+=MAX_PUPILS_PER_JOB){
+            List<Future<Void>> batch=new ArrayList<>();
+            for(Map<String,Object> pupil:eligible.subList(offset,Math.min(eligible.size(),offset+MAX_PUPILS_PER_JOB))){
+                UUID id=UUID.fromString(String.valueOf(pupil.get("id")));
+                String name=String.valueOf(pupil.get("name")),note=individual.getOrDefault(id,"");
+                batch.add(pupilWorkers.submit(()->{processPupil(job,teacher,id,name,note);return null;}));
+            }
+            for(Future<Void> task:batch){
+                try{task.get();}
+                catch(ExecutionException e){
+                    Throwable cause=e.getCause();
+                    if(firstFailure==null)firstFailure=cause instanceof Exception ex?ex:new IllegalStateException("HOMEWORK_PUPIL_FAILED",cause);
+                }
+                catch(InterruptedException e){
+                    batch.forEach(f->f.cancel(true));Thread.currentThread().interrupt();throw e;
+                }
             }
         }
+        if(firstFailure!=null)throw firstFailure;
         progress(job,PostLessonHomeworkStage.PUBLICATION,null);
         publish(job,teacher,eligible);
         safeNotify(job.id());
+    }
+
+    @SuppressWarnings("unchecked")
+    private void processPupil(Job job,AuthenticatedUser teacher,UUID id,String name,String note)throws Exception{
+        List<Integer> missing=new ArrayList<>();
+        for(int day=1;day<=job.days();day++)if(!draftExists(job.id(),id,day))missing.add(day);
+        if(missing.isEmpty())return;
+        Map<Integer,Map<String,Object>> plans=new HashMap<>();
+        for(Map<String,Object> row:db.queryForList(
+                "SELECT day_number,plan_json FROM post_lesson_homework_task_plans WHERE job_id=? AND student_id=?",job.id(),id)){
+            plans.put(((Number)row.get("day_number")).intValue(),json.readValue((String)row.get("plan_json"),Map.class));
+        }
+        List<Integer> unplanned=missing.stream().filter(day->!plans.containsKey(day)).toList();
+        if(!unplanned.isEmpty()){
+            progress(job,PostLessonHomeworkStage.LESSON_EVIDENCE,unplanned.get(0));
+            Map<String,Object> evidence=tx.execute(st->studentEvidence(teacher,job,id,unplanned.get(0),note));
+            List<Map<String,Object>> history=new ArrayList<>(priorGeneratedHomework(job.id(),id));
+            // Reserve the exercises in already prepared, not-yet-rendered days too.
+            for(int day:missing)if(plans.containsKey(day)){
+                Map<String,Object> primary=(Map<String,Object>)plans.get(day).get("primary");
+                Map<String,Object> review=(Map<String,Object>)primary.get("review");
+                history.add(Map.of("day",day,"tasks",review.get("tasks")));
+            }
+            evidence.put("previousGeneratedHomework",history);
+            List<Map<String,Object>> generated=generator.prepareTaskSeries(evidence,unplanned,job.days(),name,
+                    stage->progress(job,stage,unplanned.get(0)));
+            tx.executeWithoutResult(st->{
+                if(publishedOrRequireOwnership(job.id()))throw new IllegalStateException("HOMEWORK_JOB_LEASE_LOST");
+                for(Map<String,Object> plan:generated){
+                    int day=((Number)plan.get("day")).intValue();
+                    db.update("INSERT INTO post_lesson_homework_task_plans(job_id,student_id,day_number,plan_json) VALUES (?,?,?,?) ON CONFLICT(job_id,student_id,day_number) DO NOTHING",
+                            job.id(),id,day,json.writeValueAsString(plan));
+                    plans.put(day,plan);
+                }
+            });
+            LOG.info("Homework pupil plan saved job={} days={}",job.id(),generated.size());
+        }
+        for(int currentDay:missing){
+            Map<String,Object> plan=plans.get(currentDay);
+            if(plan==null)throw new IllegalStateException("HOMEWORK_DRAFT_VALIDATION_FAILED");
+            PostLessonHomeworkContentService.GeneratedHomework generated=renderWithContentRepair(job,teacher,id,name,note,currentDay,plan,plans);
+            OwnerWorkbookPdfRenderService.StudioRender pair=generated.pdf();
+            progress(job,PostLessonHomeworkStage.PDF_STORAGE,currentDay);
+            UUID draft=UUID.randomUUID();
+            LocalDate date=job.startDate().plusDays(currentDay-1);
+            tx.executeWithoutResult(st->{
+                if(publishedOrRequireOwnership(job.id()))throw new IllegalStateException("HOMEWORK_JOB_LEASE_LOST");
+                db.update("INSERT INTO post_lesson_homework_drafts (id,job_id,student_id,day_number,assignment_date,student_pdf,teacher_pdf,review_json) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(job_id,student_id,day_number) DO NOTHING",
+                        draft,job.id(),id,currentDay,date,pair.studentPdf(),pair.teacherPdf(),json.writeValueAsString(generated.review()));
+                int count=db.queryForObject("SELECT count(*) FROM post_lesson_homework_drafts WHERE job_id=?",Integer.class,job.id());
+                db.update("UPDATE post_lesson_homework_jobs SET generated_files=?,updated_at=now() WHERE id=?",count,job.id());
+            });
+        }
+    }
+
+    /** A persisted mathematical rejection may request new content for this day only.
+     * Layout errors, capacity and infrastructure failures never trigger another paid request.
+     * Reserve the one repair durably before calling the model. */
+    @SuppressWarnings("unchecked")
+    private PostLessonHomeworkContentService.GeneratedHomework renderWithContentRepair(
+            Job job,AuthenticatedUser teacher,UUID id,String name,String note,int day,
+            Map<String,Object> plan,Map<Integer,Map<String,Object>> plans)throws Exception{
+        try{
+            return generator.renderPreparedDay(plan,stage->progress(job,stage,day));
+        }catch(IllegalArgumentException|IllegalStateException failed){
+            String code=PostLessonHomeworkContentService.canonicalRenderRejectionCode(failed);
+            if(code==null||!PostLessonHomeworkContentService.repairableTaskContent(code))throw failed;
+            Boolean reserved=tx.execute(st->{
+                if(publishedOrRequireOwnership(job.id()))throw new IllegalStateException("HOMEWORK_JOB_LEASE_LOST");
+                return db.update("UPDATE post_lesson_homework_task_plans SET repair_count=1 WHERE job_id=? AND student_id=? AND day_number=? AND repair_count=0",job.id(),id,day)==1;
+            });
+            if(!Boolean.TRUE.equals(reserved))throw failed;
+            progress(job,PostLessonHomeworkStage.LESSON_EVIDENCE,day);
+            Map<String,Object> evidence=tx.execute(st->studentEvidence(teacher,job,id,day,note));
+            List<Map<String,Object>> history=new ArrayList<>(priorGeneratedHomework(job.id(),id));
+            Set<Integer> renderedDays=new HashSet<>();
+            for(Map<String,Object> earlier:history)renderedDays.add(((Number)earlier.get("day")).intValue());
+            for(var entry:plans.entrySet())if(entry.getKey()!=day&&!renderedDays.contains(entry.getKey())){
+                Map<String,Object> primary=(Map<String,Object>)entry.getValue().get("primary");
+                Map<String,Object> review=(Map<String,Object>)primary.get("review");
+                history.add(Map.of("day",entry.getKey(),"tasks",review.get("tasks")));
+            }
+            evidence.put("previousGeneratedHomework",history);
+            evidence.put("repairReason",PostLessonHomeworkContentService.canonicalRenderRepairAdvice(code));
+            LOG.warn("Homework single-day content repair job={} day={} code={}",job.id(),day,code);
+            List<Map<String,Object>> replacement=generator.prepareTaskSeries(evidence,List.of(day),job.days(),name,
+                    stage->progress(job,stage,day),1);
+            Map<String,Object> updated=replacement.get(0);
+            tx.executeWithoutResult(st->{
+                if(publishedOrRequireOwnership(job.id()))throw new IllegalStateException("HOMEWORK_JOB_LEASE_LOST");
+                int changed=db.update("UPDATE post_lesson_homework_task_plans SET plan_json=? WHERE job_id=? AND student_id=? AND day_number=? AND repair_count=1",
+                        json.writeValueAsString(updated),job.id(),id,day);
+                if(changed!=1)throw new IllegalStateException("HOMEWORK_JOB_LEASE_LOST");
+            });
+            plans.put(day,updated);
+            return generator.renderPreparedDay(updated,stage->progress(job,stage,day));
+        }
     }
 
     /** Hold the job lock through the draft/publication transaction to fence an expired worker. */
@@ -614,5 +715,5 @@ public class PostLessonHomeworkJobService {
         public InputStream getInputStream(){return new ByteArrayInputStream(bytes);}
         public void transferTo(File file)throws IOException{java.nio.file.Files.write(file.toPath(),bytes);}
     }
-    @PreDestroy public void stop(){worker.shutdownNow();}
+    @PreDestroy public void stop(){worker.shutdownNow();pupilWorkers.shutdownNow();}
 }

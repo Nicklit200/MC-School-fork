@@ -4,7 +4,7 @@ WORKDIR /app
 COPY pom.xml .
 COPY maven-settings-ci.xml /tmp/maven-settings-ci.xml
 COPY src ./src
-RUN mvn -B -s /tmp/maven-settings-ci.xml -DskipTests clean package
+RUN mvn -B -s /tmp/maven-settings-ci.xml -Dtest=PostLessonHomeworkTaskPlanTest,StudentOnlyHomeworkTest,PostLessonHomeworkRecoveryTest,PostLessonHomeworkSharedGeneratorTest,OwnerWorkbookStudioFailureTest clean package
 
 # Use a Node 22 binary built against the older bullseye glibc (also compatible with jammy).
 FROM node:22-bullseye-slim AS node_runtime
@@ -26,6 +26,15 @@ RUN python3 -m venv /opt/mindcrafti-pdf && \
 COPY --from=node_runtime /opt/mindcrafti-workbook/node_modules /opt/mindcrafti-workbook/node_modules
 ENV PATH="/opt/mindcrafti-pdf/bin:${PATH}"
 ENV MINDCRAFTI_WORKBOOK_MODULES="/opt/mindcrafti-workbook/node_modules"
+# Required production build gate: actual PDFs from the Java compiler, without AI.
+COPY src/main/resources/owner-workbook-generator/ /tmp/workbook-smoke/renderer/
+COPY src/test/resources/homework_generator_smoke.py /tmp/workbook-smoke/run.py
+COPY --from=build /app/target/homework-generator-smoke/ /tmp/workbook-smoke/fixtures/
+RUN ln -s /opt/mindcrafti-workbook/node_modules /tmp/workbook-smoke/renderer/node_modules && \
+    node --test /tmp/workbook-smoke/renderer/visual-tasks.test.mjs && \
+    python3 /tmp/workbook-smoke/run.py /tmp/workbook-smoke/renderer /tmp/workbook-smoke/fixtures /tmp/workbook-smoke/output && \
+    rm -rf /tmp/workbook-smoke
+
 WORKDIR /app
 RUN groupadd --system app && useradd --system --gid app --home-dir /app app
 COPY --from=build /app/target/*.jar app.jar

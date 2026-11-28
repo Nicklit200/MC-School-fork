@@ -193,8 +193,17 @@ public class OwnerWorkbookPdfRenderService {
     }
 
     public StudioRender renderStudio(String lessonJson, String layoutJson) throws Exception {
+        return renderStudioInternal(lessonJson,layoutJson,false);
+    }
+
+    /** Homework waits for shared renderer capacity, without paying for a new AI request. */
+    StudioRender renderHomeworkStudio(String lessonJson) throws Exception {
+        return renderStudioInternal(lessonJson,activeLayout(),true);
+    }
+
+    private StudioRender renderStudioInternal(String lessonJson,String layoutJson,boolean waitForSlot) throws Exception {
         WorkbookGeneratorLayoutService.validate(layoutJson);
-        if (!renderSlots.tryAcquire())
+        if (!(waitForSlot ? renderSlots.tryAcquire(180,TimeUnit.SECONDS) : renderSlots.tryAcquire()))
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Workbook renderer busy");
         try {
             if (lessonJson == null || lessonJson.isBlank() || lessonJson.length() > MAX_INPUT_CHARS)
@@ -271,7 +280,7 @@ public class OwnerWorkbookPdfRenderService {
             String code=studioFailureCode(readStudioDiagnostic(rendererLog));
             // Diagnostic code is an allowlisted category, never child output or pupil data.
             LOG.warn("Workbook studio process failed: diagnosticCode={}",code);
-            throw new IllegalArgumentException(code,failure);
+            throw new IllegalArgumentException(code);
         }
     }
 
@@ -320,7 +329,12 @@ public class OwnerWorkbookPdfRenderService {
             return "WORKBOOK_RENDER_LAYOUT_QA";
         if (log.contains("Fraction strip needs 0 <= numerator <= denominator"))
             return "WORKBOOK_RENDER_FRACTION_STRIP";
-        if (log.contains("matching needs 1 to 12 items") || log.contains("Invalid matching index")
+        if (log.contains("Invalid graph range") || log.contains("Invalid function parameters")
+                || log.contains("Invalid visual") || log.contains("Unknown visual property")
+                || log.contains("isolated visible solutions") || log.contains("not visible")
+                || log.contains("Invalid geometry") || log.contains("Unsupported polygon objective")
+                || log.contains("Invalid fraction circle")
+                || log.contains("matching needs 1 to 12 items") || log.contains("Invalid matching index")
                 || log.contains("intersectionResult requires a structured graph"))
             return "WORKBOOK_RENDER_VISUAL_SPEC";
         if (log.contains("split.columns must") || log.contains("Invalid bounded layout length")

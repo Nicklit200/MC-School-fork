@@ -270,13 +270,16 @@ class PostLessonHomeworkPdfIntegrationTest {
         assertEquals("WORKBOOK_CANONICAL",result.review().get("generator"));
         assertEquals(true,result.pdf().qa().get("mathPassed"));
         assertEquals(true,result.pdf().qa().get("layoutPassed"));
-        try(PDDocument pupil=Loader.loadPDF(result.pdf().studentPdf());
-            PDDocument teacher=Loader.loadPDF(result.pdf().teacherPdf())){
+        assertEquals(0,result.pdf().teacherPages());
+        assertEquals(0,result.pdf().teacherPdf().length);
+        try(PDDocument pupil=Loader.loadPDF(result.pdf().studentPdf())){
             assertEquals(1,pupil.getNumberOfPages());
             assertFalse(pupil.isEncrypted());
-            assertTrue(new PDFTextStripper().getText(pupil).contains("Quadratische Funktionen"));
-            assertFalse(new PDFTextStripper().getText(pupil).contains("Fictional Child"));
-            assertTrue(new PDFTextStripper().getText(teacher).contains("Lösungen"));
+            String pupilText=new PDFTextStripper().getText(pupil);
+            assertTrue(pupilText.contains("Quadratische Funktionen"));
+            assertFalse(pupilText.contains("Fictional Child"));
+            assertFalse(pupilText.contains("Lösungen"));
+            assertFalse(pupilText.contains("Nullstellen x=-2 und x=2."));
         }
         verify(provider,times(1)).send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class));
         verifyNoInteractions(unusedLegacy);

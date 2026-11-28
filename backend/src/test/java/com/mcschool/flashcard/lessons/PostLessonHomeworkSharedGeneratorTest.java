@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-/** Offline proof that production homework goes through WorkbookContentService. */
+/** Compatibility tests for the older canonical daily authoring entry point. */
 class PostLessonHomeworkSharedGeneratorTest {
     private final ObjectMapper json=new ObjectMapper();
 
@@ -89,12 +89,12 @@ class PostLessonHomeworkSharedGeneratorTest {
         return evidence;
     }
 
-    @Test void automaticHomeworkCallsExactSameWorkbookContentEngine() throws Exception {
+    @Test void legacyCanonicalHomeworkUsesSharedRendererWithoutTeacherPdf() throws Exception {
         HttpClient fake=workbookProvider(graphDocument());
         var workbook=new WorkbookContentService("fake-key","single-workbook-model",json,fake);
         var renderer=mock(OwnerWorkbookPdfRenderService.class);
         var rendered=new OwnerWorkbookPdfRenderService.StudioRender(
-                new byte[200],new byte[250],1,1,Map.of("mathPassed",true,"layoutPassed",true));
+                new byte[200],new byte[0],1,0,Map.of("mathPassed",true,"layoutPassed",true));
         when(renderer.renderStudio(anyString())).thenReturn(rendered);
         // The old homework provider is separate and must NOT be called.
         HttpClient legacy=mock(HttpClient.class);
@@ -121,6 +121,8 @@ class PostLessonHomeworkSharedGeneratorTest {
         Map<?,?> normalized=json.readValue(source.getValue(),Map.class);
         assertEquals(true,((Map<?,?>)normalized.get("meta")).get("homeworkMode"));
         assertEquals(1,((List<?>)normalized.get("workbookPages")).size());
+        assertEquals(List.of(),normalized.get("teacherPages"));
+        assertEquals(0,result.pdf().teacherPages());
     }
 
     @Test void graphLessonRejectsNonGraphicContentRatherThanPublishingIt() throws Exception {
