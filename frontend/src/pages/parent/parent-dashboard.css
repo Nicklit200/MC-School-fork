@@ -206,6 +206,11 @@
 /* Lesson-based progress chart: large touch targets and a detail panel under the line. */
 .parent-progress__graph { overflow-x:auto; overflow-y:hidden; overscroll-behavior-x:contain; }
 .parent-progress__graph svg { display:block; height:auto; max-height:none; }
+.parent-progress__graph-meta { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; }
+.parent-progress__current-score { color:var(--student-orange); font-size:15px; font-weight:850; font-variant-numeric:tabular-nums; }
+.parent-progress__snapshot-connection { stroke:var(--student-orange); stroke-width:2; stroke-dasharray:5 6; opacity:.8; }
+.parent-progress__current-halo { fill:var(--surface); stroke:var(--student-orange); stroke-width:2; }
+.parent-progress__current-dot { fill:var(--student-orange); }
 .parent-progress__graph-point { cursor:pointer; outline:none; }
 .parent-progress__hit-target { fill:transparent; pointer-events:all; }
 .parent-progress__graph-point:hover .parent-progress__dot,
