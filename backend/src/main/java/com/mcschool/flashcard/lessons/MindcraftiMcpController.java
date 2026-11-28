@@ -1474,8 +1474,20 @@ public class MindcraftiMcpController {
         return value;
     }
 
+    private List<GroupLessonResponse> workbookCalendarSnapshot(AuthenticatedUser teacher,String eventId) {
+        // Native events are owned and stored in Mindcrafti. Refreshing Google's
+        // entire calendar (including Meet subscription) cannot change them.
+        return eventId.startsWith("local-")
+                ? calendarLessonService.listSavedGroupLessons(teacher)
+                : calendarLessonService.listGroupLessons(teacher);
+    }
+
     private GroupLessonResponse selectedWorkbookLesson(AuthenticatedUser teacher, String eventId) {
-        return calendarLessonService.listGroupLessons(teacher).stream()
+        return selectedWorkbookLesson(workbookCalendarSnapshot(teacher,eventId),eventId);
+    }
+
+    private GroupLessonResponse selectedWorkbookLesson(List<GroupLessonResponse> lessons,String eventId) {
+        return lessons.stream()
                 .filter(l -> eventId.equals(l.eventId()))
                 .findFirst().orElseThrow(() -> new IllegalArgumentException(
                         "Calendar lesson not found. Use the exact eventId from find_lessons."));
@@ -1806,8 +1818,20 @@ public class MindcraftiMcpController {
 
     private Map<String, Object> prepareWorkbookContext(Map<String, Object> arguments, AuthContext auth,
                                                         boolean completedReferenceForHomework) throws Exception {
+        return prepareWorkbookContext(arguments,auth,completedReferenceForHomework,true).context();
+    }
+
+    private record WorkbookContextSnapshot(GroupLessonResponse lesson,Map<String,Object> context) {}
+
+    /** Revalidation hashes exactly the same inputs as the original context, but
+     * omits transcript and student analytics that workbookContextToken discards. */
+    private WorkbookContextSnapshot prepareWorkbookContext(Map<String,Object> arguments,AuthContext auth,
+                    boolean completedReferenceForHomework,boolean includeEvidence)throws Exception {
+        long started=System.nanoTime();
         AuthenticatedUser teacher = requireTeacher(arguments, auth);
-        GroupLessonResponse lesson = selectedWorkbookLesson(teacher, required(arguments, "eventId"));
+        String eventId=required(arguments,"eventId");
+        List<GroupLessonResponse> calendar=workbookCalendarSnapshot(teacher,eventId);
+        GroupLessonResponse lesson = selectedWorkbookLesson(calendar,eventId);
         LocalDate lessonDate = workbookLocalDate(lesson);
         int durationMinutes = Math.toIntExact(java.time.Duration.between(
                 lesson.startsAt(), lesson.endsAt()).toMinutes());
@@ -1840,7 +1864,7 @@ public class MindcraftiMcpController {
         result.put("monthPlan", parsedPlan);
         result.put("monthPlanAvailable", !parsedPlan.isEmpty());
         List<GroupLessonResponse> actualLessons = trial ? List.of()
-                : calendarLessonService.listGroupLessons(teacher).stream()
+                : calendar.stream()
                 .filter(l -> l.startsAt() != null)
                 .filter(l -> lesson.groupId() != null ? lesson.groupId().equals(l.groupId())
                         : lesson.studentId().equals(l.studentId()))
@@ -1866,7 +1890,7 @@ public class MindcraftiMcpController {
         // only once its end time has passed.
         boolean referenceCompleted = lesson.endsAt() != null
                 && !lesson.endsAt().isAfter(java.time.Instant.now());
-        if (completedReferenceForHomework && referenceCompleted) {
+        if (includeEvidence && completedReferenceForHomework && referenceCompleted) {
             LessonPreparation completed = preparationRepository
                     .findByTeacherIdAndEventId(teacher.id(), lesson.eventId()).orElse(null);
             result.put("currentPreparation", workbookPrepSummary(completed));
@@ -1880,7 +1904,7 @@ public class MindcraftiMcpController {
         // Merely having an earlier start time does not mean a lesson finished.
         java.time.Instant cutoff = java.time.Instant.now();
         List<GroupLessonResponse> priorLessons = trial ? List.of()
-                : calendarLessonService.listGroupLessons(teacher).stream()
+                : calendar.stream()
                 .filter(l -> l.startsAt() != null && l.endsAt() != null)
                 .filter(l -> !l.eventId().equals(lesson.eventId()))
                 .filter(l -> !l.endsAt().isAfter(lesson.startsAt())
@@ -1894,13 +1918,15 @@ public class MindcraftiMcpController {
             Map<String,Object> previousSummary = new LinkedHashMap<>();
             previousSummary.put("eventId", previous.eventId());
             previousSummary.put("date", workbookLocalDate(previous).toString());
-            previousSummary.put("preparation", workbookPrepSummary(preparationRepository
+            if(includeEvidence)previousSummary.put("preparation", workbookPrepSummary(preparationRepository
                     .findByTeacherIdAndEventId(teacher.id(), previous.eventId()).orElse(null)));
             previousSummaries.add(previousSummary);
         }
         result.put("previousLessons", previousSummaries);
         result.put("previousLesson", previousSummaries.isEmpty() ? null : previousSummaries.get(0));
 
+        List<Map<String,Object>> studentContexts = new ArrayList<>();
+        if(includeEvidence){
         List<Map<String,Object>> students = new ArrayList<>();
         if (lesson.studentId() != null) {
             students.add(Map.of("id", lesson.studentId().toString(),
@@ -1927,7 +1953,6 @@ public class MindcraftiMcpController {
         LocalDate activityEnd = lessonDate.isAfter(LocalDate.now(WORKBOOK_ZONE))
                 ? LocalDate.now(WORKBOOK_ZONE) : lessonDate;
         LocalDate activityStart = activityEnd.minusDays(20);
-        List<Map<String,Object>> studentContexts = new ArrayList<>();
         for (Map<String,Object> student : students) {
             UUID studentId = uuid(String.valueOf(student.get("id")), "studentId");
             Map<String,Object> item = new LinkedHashMap<>(student);
@@ -2017,6 +2042,7 @@ public class MindcraftiMcpController {
             item.put("pdfHomeworkErrorsVerified", false);
             studentContexts.add(item);
         }
+        }
         result.put("students", studentContexts);
         result.put("schoolCalendarGuidance", "If present, schoolCalendarReference is a month-by-month planning example, NOT the verified teaching order or test schedule of this pupil's school. Verify what the pupil actually studied, last lesson and confirmed teacher announcements before recommending homework.");
         result.put("studentMembershipNeedsTeacherReview", true);
@@ -2057,7 +2083,9 @@ public class MindcraftiMcpController {
         result.put("nextStep", "MANDATORY: ChatGPT must author lessonJson from this exact rendererContract and current lesson evidence (student workbookPages, teacherPages, qa.algebra), then call generate_lesson_workbook_draft with lessonJson, this fresh contextToken, eventId and a stable idempotencyKey. Server AI authoring is disabled. The school server renders only two unpublished PDF previews; do not publish until approved.");
         result.put("rendererContract",workbookRendererContract());
         result.put("contextToken",workbookContextToken(result));
-        return result;
+        LOG.info("Workbook context prepared mode={} nativeLesson={} elapsedMs={}",includeEvidence?"FULL":"VERIFY",
+                eventId.startsWith("local-"),(System.nanoTime()-started)/1_000_000);
+        return new WorkbookContextSnapshot(lesson,result);
     }
 
     private Map<String,Object> workbookRendererContract() {
@@ -2190,21 +2218,26 @@ public class MindcraftiMcpController {
             normalized.put("homeworkDay",day);
             normalized.put("homeworkSeriesKey",required(args,"homeworkSeriesKey"));
         }
+        // Receipt service checks ownership and invokes this callback both before
+        // and after its database lock. Keep the second verified snapshot scoped
+        // to this operation, never cache authorization across requests.
+        var verified=new java.util.concurrent.atomic.AtomicReference<WorkbookContextSnapshot>();
         Map<String,Object> result=(Map<String,Object>) personalWorkbookReceipts.execute(actor, teacher.id(), "generate_lesson_workbook_draft", key, normalized,
                 () -> {
-                    selectedWorkbookLesson(personalWorkbookAccess.requireTeacher(actor, teacher.id()), eventId);
-                    if(suppliedContent) {
-                        try {
-                            Map<String,Object> fresh=prepareWorkbookContext(Map.of("teacherId",teacher.id().toString(),"eventId",eventId),auth,homework);
-                            requireFreshWorkbookToken(fresh,suppliedToken);
-                        } catch(RuntimeException ex) { throw ex; }
-                        catch(Exception ex) { throw new IllegalStateException("Cannot refresh workbook evidence",ex); }
-                    }
+                    personalWorkbookAccess.requireTeacher(actor, teacher.id());
+                    try {
+                        WorkbookContextSnapshot fresh=prepareWorkbookContext(
+                                Map.of("teacherId",teacher.id().toString(),"eventId",eventId),auth,homework,false);
+                        requireFreshWorkbookToken(fresh.context(),suppliedToken);
+                        verified.set(fresh);
+                    } catch(RuntimeException ex) { throw ex; }
+                    catch(Exception ex) { throw new IllegalStateException("Cannot refresh workbook evidence",ex); }
                 },
                 () -> personalWorkbookAccess.asTeacher(actor, teacher, () -> {
                     try {
                         Map<String,Object> scoped = Map.of("teacherId", teacher.id().toString(), "eventId", eventId);
-                        Map<String,Object> context = prepareWorkbookContext(scoped, auth, homework);
+                        WorkbookContextSnapshot snapshot=java.util.Objects.requireNonNull(verified.get(),"Verified workbook context required");
+                        Map<String,Object> context=snapshot.context();
                         requireFreshWorkbookToken(context,suppliedToken);
                         @SuppressWarnings("unchecked") Map<String,Object> prepared=objectMapper.readValue(suppliedJson,Map.class);
                         if(!(prepared.get("qa") instanceof Map<?,?> qa) || !(qa.get("algebra") instanceof List<?> checks) || checks.isEmpty())
@@ -2219,7 +2252,7 @@ public class MindcraftiMcpController {
                         generation.put("lessonJson", content.lessonJson());
                         generation.put("lessonPlan", content.lessonPlan());
                         generation.put("difficulties", content.difficulties());
-                        Map<String,Object> draftResult = generateWorkbook(generation, auth, homework);
+                        Map<String,Object> draftResult = renderVerifiedWorkbook(generation,teacher,snapshot.lesson());
                         if(homework) {
                             lessonPdfDraftService.markHomeworkDraft(teacher,
                                     UUID.fromString(String.valueOf(draftResult.get("draftId"))),eventId,homeworkDay,seriesKey);
@@ -2262,12 +2295,13 @@ public class MindcraftiMcpController {
     private Map<String,Object> generateWorkbook(Map<String,Object> arguments, AuthContext auth,
                                                 boolean completedReferenceForHomework) throws Exception {
         AuthenticatedUser teacher = requireTeacher(arguments, auth);
-        GroupLessonResponse lesson = selectedWorkbookLesson(teacher, required(arguments, "eventId"));
-        String expectedContext = String.valueOf(prepareWorkbookContext(arguments,auth,completedReferenceForHomework).get("contextToken"));
-        String receivedContext = required(arguments, "contextToken");
-        if (!MessageDigest.isEqual(expectedContext.getBytes(StandardCharsets.UTF_8),
-                receivedContext.getBytes(StandardCharsets.UTF_8)))
-            throw new IllegalArgumentException("Workbook context is stale; call prepare_workbook_context again");
+        WorkbookContextSnapshot fresh=prepareWorkbookContext(arguments,auth,completedReferenceForHomework,false);
+        requireFreshWorkbookToken(fresh.context(),required(arguments,"contextToken"));
+        return renderVerifiedWorkbook(arguments,teacher,fresh.lesson());
+    }
+
+    private Map<String,Object> renderVerifiedWorkbook(Map<String,Object> arguments,AuthenticatedUser teacher,
+                                                       GroupLessonResponse lesson)throws Exception {
         String lessonJson = required(arguments, "lessonJson");
         @SuppressWarnings("unchecked")
         Map<String,Object> doc = objectMapper.readValue(lessonJson, Map.class);
@@ -2335,7 +2369,7 @@ public class MindcraftiMcpController {
                     personalWorkbookAccess.requireTeacher(currentActor,teacher.id());
                 }
                 selectedWorkbookLesson(teacher,event);
-                requireFreshWorkbookToken(prepareWorkbookContext(scoped,auth),String.valueOf(scoped.get("contextToken")));
+                requireFreshWorkbookToken(prepareWorkbookContext(scoped,auth,false,false).context(),String.valueOf(scoped.get("contextToken")));
             } catch(RuntimeException ex) { throw ex; }
             catch(Exception ex) { throw new IllegalStateException("Cannot refresh workbook evidence",ex); }
         };
