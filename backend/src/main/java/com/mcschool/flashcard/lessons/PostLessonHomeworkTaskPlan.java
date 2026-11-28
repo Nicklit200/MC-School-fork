@@ -89,7 +89,9 @@ final class PostLessonHomeworkTaskPlan {
                 if("visual".equals(task.get("kind"))){
                     if(tasks.size()!=1)throw invalid("ONE_VISUAL_PER_PAGE");
                     Map<String,Object> visual=map(task.get("visual"));
-                    if(!seenVisual.add(visual))throw invalid("REPEATED_VISUAL");
+                    Map<String,Object> fingerprint=new LinkedHashMap<>(visual);
+                    fingerprint.remove("xRange");fingerprint.remove("yRange");
+                    if(!seenVisual.add(fingerprint))throw invalid("REPEATED_VISUAL");
                     hasGraph|="graph".equals(visual.get("type"));
                 }
             }
@@ -179,6 +181,7 @@ final class PostLessonHomeworkTaskPlan {
         Map<String,Object> document=Map.of("meta",meta,"workbookPages",List.of(Map.of("title",topic,"subtitle",subtitle,"blocks",blocks)),
                 "teacherPages",List.of(),"qa",Map.of("algebra",checks));
         String checked=McpHomeworkDraftValidator.normalize(json,json.writeValueAsString(document),day,totalDays,studentName);
+        OwnerWorkbookPdfRenderService.validateDocument(json.readValue(checked,Map.class));
         var authored=new WorkbookContentService.Content(checked,String.join("; ",sources),"");
         var review=PostLessonHomeworkCanonicalAdapter.inspect(json,authored,evidence);
         Map<String,Object> metadata=new LinkedHashMap<>(review.review());
