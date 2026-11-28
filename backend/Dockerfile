@@ -4,7 +4,7 @@ WORKDIR /app
 COPY pom.xml .
 COPY maven-settings-ci.xml /tmp/maven-settings-ci.xml
 COPY src ./src
-RUN mvn -B -s /tmp/maven-settings-ci.xml -Dtest=PostLessonHomeworkTaskPlanTest,StudentOnlyHomeworkTest,PostLessonHomeworkRecoveryTest clean package
+RUN mvn -B -s /tmp/maven-settings-ci.xml -Dtest=PostLessonHomeworkTaskPlanTest,StudentOnlyHomeworkTest,PostLessonHomeworkRecoveryTest,PostLessonHomeworkSharedGeneratorTest,OwnerWorkbookStudioFailureTest clean package
 
 # Use a Node 22 binary built against the older bullseye glibc (also compatible with jammy).
 FROM node:22-bullseye-slim AS node_runtime
