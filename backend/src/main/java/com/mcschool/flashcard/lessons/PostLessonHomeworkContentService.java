@@ -627,7 +627,9 @@ public class PostLessonHomeworkContentService {
                             :"Regenerate the complete canonical one-page JSON with numbered tasks and matching QA.");
                 LOG.warn("Homework content rejected: day={} attempt={} mode={} code={} origin={}",
                         day,attempt,attemptMode,code,PostLessonHomeworkFailure.origin(rejected));
-                if(attempt==maxAttempts)
+                // Additional simplified attempts are only for layout/render recovery,
+                // not for ignoring a mandatory graph or repeatedly duplicating tasks.
+                if(attempt>=MAX_DRAFT_ATTEMPTS)
                     throw new IllegalStateException(repeated?"HOMEWORK_DRAFT_REPETITION_FAILED"
                             :"HOMEWORK_DRAFT_VALIDATION_FAILED",rejected);
                 lessonContext.put("repairReason",code+": "+advice);
