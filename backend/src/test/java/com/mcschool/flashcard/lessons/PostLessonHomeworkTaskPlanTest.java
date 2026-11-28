@@ -86,6 +86,31 @@ class PostLessonHomeworkTaskPlanTest {
         assertThrows(IllegalArgumentException.class,()->PostLessonHomeworkMath.student("1+2=3","equivalence",""));
     }
 
+    @Test void sevenDaysUseOneProviderRequestAndRenderingDoesNotCallProvider() throws Exception {
+        var fake=org.mockito.Mockito.mock(java.net.http.HttpClient.class);
+        @SuppressWarnings("unchecked") var response=(java.net.http.HttpResponse<String>)org.mockito.Mockito.mock(java.net.http.HttpResponse.class);
+        List<Map<String,Object>> days=new ArrayList<>();
+        for(int day=1;day<=7;day++)days.add(day(day,expression(day+"+10")));
+        org.mockito.Mockito.when(response.statusCode()).thenReturn(200);
+        org.mockito.Mockito.when(response.body()).thenReturn(json.writeValueAsString(Map.of("status","completed","output",
+                List.of(Map.of("content",List.of(Map.of("type","output_text","text",json.writeValueAsString(Map.of("days",days)))))))));
+        org.mockito.Mockito.when(fake.send(org.mockito.ArgumentMatchers.any(java.net.http.HttpRequest.class),
+                org.mockito.ArgumentMatchers.<java.net.http.HttpResponse.BodyHandler<String>>any())).thenReturn(response);
+        var renderer=org.mockito.Mockito.mock(OwnerWorkbookPdfRenderService.class);
+        org.mockito.Mockito.when(renderer.renderHomeworkStudio(org.mockito.ArgumentMatchers.anyString())).thenReturn(
+                new OwnerWorkbookPdfRenderService.StudioRender(new byte[200],new byte[0],1,0,Map.of("mathPassed",true,"layoutPassed",true)));
+        var service=new PostLessonHomeworkContentService("fake-key","fake-model",json,renderer,fake);
+        var plans=service.prepareTaskSeries(Map.of("preferredLanguage","DE"),List.of(1,2,3,4,5,6,7),7,"",stage->{});
+        assertEquals(7,plans.size());
+        for(var plan:plans)assertEquals(0,service.renderPreparedDay(plan,stage->{}).pdf().teacherPages());
+        org.mockito.Mockito.verify(fake,org.mockito.Mockito.times(1)).send(
+                org.mockito.ArgumentMatchers.any(java.net.http.HttpRequest.class),
+                org.mockito.ArgumentMatchers.<java.net.http.HttpResponse.BodyHandler<String>>any());
+        org.mockito.Mockito.verify(renderer,org.mockito.Mockito.times(7)).renderHomeworkStudio(org.mockito.ArgumentMatchers.anyString());
+        assertFalse(PostLessonHomeworkContentService.repairableTaskContent("WORKBOOK_RENDER_LAYOUT_QA"));
+        assertTrue(PostLessonHomeworkContentService.repairableTaskContent("WORKBOOK_RENDER_MATH_QA"));
+    }
+
     @Test void twoGroupCapacityIsBounded(){
         assertEquals(2,PostLessonHomeworkJobService.MAX_PARALLEL_JOBS);
         assertEquals(4,PostLessonHomeworkJobService.MAX_PUPILS_PER_JOB);
