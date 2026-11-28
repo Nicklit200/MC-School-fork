@@ -267,7 +267,10 @@ public class OwnerWorkbookPdfRenderService {
         } catch (IllegalArgumentException failure) {
             if (!"Plain worksheet generation or verification failed".equals(failure.getMessage()))
                 throw failure;
-            throw new IllegalArgumentException(studioFailureCode(readStudioDiagnostic(rendererLog)));
+            String code=studioFailureCode(readStudioDiagnostic(rendererLog));
+            // Diagnostic code is an allowlisted category, never child output or pupil data.
+            LOG.warn("Workbook studio process failed: diagnosticCode={}",code);
+            throw new IllegalArgumentException(code,failure);
         }
     }
 
@@ -314,6 +317,18 @@ public class OwnerWorkbookPdfRenderService {
                 || log.contains("Generated PDF failed the mandatory layout check")
                 || log.contains("A4 page packing exhausted"))
             return "WORKBOOK_RENDER_LAYOUT_QA";
+        if (log.contains("Fraction strip needs 0 <= numerator <= denominator"))
+            return "WORKBOOK_RENDER_FRACTION_STRIP";
+        if (log.contains("matching needs 1 to 12 items") || log.contains("Invalid matching index")
+                || log.contains("intersectionResult requires a structured graph"))
+            return "WORKBOOK_RENDER_VISUAL_SPEC";
+        if (log.contains("split.columns must") || log.contains("Invalid bounded layout length")
+                || log.contains("Invalid writing line count"))
+            return "WORKBOOK_RENDER_LAYOUT_SCHEMA";
+        if (log.contains("Unknown block:") || log.contains("Invalid block list")
+                || log.contains("Invalid richText content") || log.contains("Text exceeds 6000 characters")
+                || log.contains("List exceeds 200 entries") || log.contains("Expected integer"))
+            return "WORKBOOK_RENDER_SCHEMA";
         if (log.contains("Unknown workbook block:") || log.contains("Unknown teacher block:")
                 || log.contains("Invalid lesson pages") || log.contains("Math requires exactly one")
                 || log.contains("Invalid bounded layout length") || log.contains("Invalid writing line count"))
