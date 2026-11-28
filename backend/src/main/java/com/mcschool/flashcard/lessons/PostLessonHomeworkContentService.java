@@ -442,29 +442,67 @@ public class PostLessonHomeworkContentService {
             instruction+=" A real programmatically rendered graph from the SAME school "
                     +"workbook engine is MANDATORY today; numerical substitution without "
                     +"a graph is not acceptable.";
-        for(int attempt=1;attempt<=MAX_DRAFT_ATTEMPTS;attempt++){
+        final int maxAttempts=MAX_DRAFT_ATTEMPTS+2;
+        for(int attempt=1;attempt<=maxAttempts;attempt++){
+            boolean simplified=attempt>MAX_DRAFT_ATTEMPTS;
+            String attemptMode=simplified?"SIMPLE":"NORMAL";
+            lessonContext.put("homeworkRecoveryMode",attemptMode);
+            String attemptInstruction=instruction;
+            if(simplified){
+                attemptInstruction+=" RECOVERY MODE: exactly ONE independent task on the same "
+                        +"actually practised skill; choose modest numbers, a short title, a single row "
+                        +"or a single native visualTask, and six full-width handwriting lines. "
+                        +"Use the simplest supported representation, no split layouts, decorative "
+                        +"diagrams, optional complex blocks, or additional exercises. "
+                        +"Keep required native graphs or geometry, language, private answers, "
+                        +"exact mathematical QA, and one-page A4 validation. "
+                        +"Use different values from earlier days; do not copy their exercises.";
+                LOG.info("Homework entering simplified recovery: day={} attempt={} max={}",day,attempt,maxAttempts);
+            }
             progress.accept(PostLessonHomeworkStage.AI_CONTENT);
-            WorkbookContentService.Content authored=workbookGenerator.generateHomework(
-                    lessonContext,instruction,day,totalDays,studentName);
+            WorkbookContentService.Content authored;
+            try{
+                authored=workbookGenerator.generateHomework(
+                        lessonContext,attemptInstruction,day,totalDays,studentName);
+            }catch(IllegalStateException failedContent){
+                if(!"HOMEWORK_DRAFT_VALIDATION_FAILED".equals(failedContent.getMessage()))throw failedContent;
+                String advice=WorkbookContentService.homeworkRepairAdvice(
+                        failedContent.getCause() instanceof Exception cause?cause:failedContent);
+                LOG.warn("Homework author validation rejected: day={} attempt={} mode={} code={} advice={} origin={}",
+                        day,attempt,attemptMode,"HOMEWORK_DRAFT_VALIDATION_FAILED",advice,
+                        PostLessonHomeworkFailure.origin(failedContent));
+                if(attempt==maxAttempts)throw failedContent;
+                lessonContext.put("repairReason",advice);
+                continue;
+            }
             progress.accept(PostLessonHomeworkStage.CONTENT_VALIDATION);
             PostLessonHomeworkCanonicalAdapter.Reviewed checked;
             try{
                 checked=PostLessonHomeworkCanonicalAdapter.inspect(json,authored,evidence);
                 if(requireGraph && !checked.hasGraphTask())
                     throw new IllegalArgumentException("HOMEWORK_GRAPH_PRACTICE_REQUIRED");
+                if(simplified && (!(checked.diversity().get("tasks") instanceof List<?> tasks)
+                        || tasks.size()!=1))
+                    throw new IllegalArgumentException("HOMEWORK_RECOVERY_ONE_TASK_REQUIRED");
                 PostLessonHomeworkSeriesDiversity.validate(checked.diversity(),
                         evidence.get("previousGeneratedHomework"),day);
             }catch(IllegalArgumentException rejected){
                 String reason=Objects.toString(rejected.getMessage(),"");
                 boolean repeated=Set.of(PostLessonHomeworkSeriesDiversity.REPEATED_EXPRESSION,
                         PostLessonHomeworkSeriesDiversity.REPEATED_PATTERN).contains(reason);
-                if(attempt==MAX_DRAFT_ATTEMPTS)
+                String code=reason.matches("HOMEWORK_[A-Z_]{1,90}")?reason:"HOMEWORK_CONTENT_RULE";
+                String advice=repeated?PostLessonHomeworkSeriesDiversity.repairAdvice(reason)
+                        :("HOMEWORK_RECOVERY_ONE_TASK_REQUIRED".equals(reason)
+                            ?"Simplified recovery must contain exactly one numbered independent task."
+                            :"HOMEWORK_GRAPH_PRACTICE_REQUIRED".equals(reason)
+                            ?"A real native graph task is required for the actual lesson skill."
+                            :"Regenerate the complete canonical one-page JSON with numbered tasks and matching QA.");
+                LOG.warn("Homework content rejected: day={} attempt={} mode={} code={} origin={}",
+                        day,attempt,attemptMode,code,PostLessonHomeworkFailure.origin(rejected));
+                if(attempt==maxAttempts)
                     throw new IllegalStateException(repeated?"HOMEWORK_DRAFT_REPETITION_FAILED"
                             :"HOMEWORK_DRAFT_VALIDATION_FAILED",rejected);
-                lessonContext.put("repairReason",repeated
-                        ?PostLessonHomeworkSeriesDiversity.repairAdvice(reason)
-                        :"Previous attempt did not match the actual completed lesson or its required "
-                        +"native graphic task. Generate a fresh lessonJson, not a text substitute.");
+                lessonContext.put("repairReason",code+": "+advice);
                 continue;
             }
             progress.accept(PostLessonHomeworkStage.PDF_RENDER);
@@ -473,21 +511,54 @@ public class PostLessonHomeworkContentService {
                 if(pdf.studentPages()!=1 || pdf.teacherPages()<1
                         ||pdf.studentPdf().length<100 || pdf.teacherPdf().length<100)
                     throw new IllegalArgumentException("HOMEWORK_PDF_INVALID");
+                if(simplified)LOG.info("Homework simplified recovery succeeded: day={} attempt={}",day,attempt);
                 return new GeneratedHomework(pdf,checked.review());
-            }catch(IllegalArgumentException failedRender){
-                if(attempt==MAX_DRAFT_ATTEMPTS)
-                    throw new IllegalStateException("HOMEWORK_DRAFT_RENDER_FAILED",failedRender);
-                lessonContext.put("repairReason","Keep the exact lesson skills and graph tasks, "
-                        +"but shorten the content to fit one complete A4 page with six writing lines.");
-            }catch(IllegalStateException failedRender){
-                if(!"Workbook studio QA did not pass".equals(failedRender.getMessage()))throw failedRender;
-                if(attempt==MAX_DRAFT_ATTEMPTS)
-                    throw new IllegalStateException("HOMEWORK_DRAFT_MATH_QA_FAILED",failedRender);
-                lessonContext.put("repairReason","The graphical or algebraic QA did not pass. "
-                        +"Use simpler but lesson-matched numbers with the same skill and native graph.");
+            }catch(IllegalArgumentException | IllegalStateException failedRender){
+                String code=canonicalRenderRejectionCode(failedRender);
+                // Runtime outages and interrupted workers are not content errors.
+                // Do not burn AI calls or hide infrastructure failures.
+                if("WORKBOOK_RENDER_RUNTIME_UNAVAILABLE".equals(code))
+                    throw new IllegalStateException("HOMEWORK_RENDERER_UNAVAILABLE",failedRender);
+                if(code==null)throw failedRender;
+                String advice=canonicalRenderRepairAdvice(code);
+                LOG.warn("Homework PDF rejected: day={} attempt={} max={} mode={} code={} advice={} origin={}",
+                        day,attempt,maxAttempts,attemptMode,code,advice,
+                        PostLessonHomeworkFailure.origin(failedRender));
+                if(attempt==maxAttempts){
+                    boolean mathFailure=code.startsWith("WORKBOOK_RENDER_MATH_");
+                    throw new IllegalStateException(mathFailure?"HOMEWORK_DRAFT_MATH_QA_FAILED"
+                            :"HOMEWORK_DRAFT_RENDER_FAILED",failedRender);
+                }
+                lessonContext.put("repairReason",code+": "+advice);
             }
         }
         throw new IllegalStateException("HOMEWORK_DRAFT_VALIDATION_FAILED");
+    }
+
+    /** Only stable server-generated diagnostics are sent to the model or logs. */
+    static String canonicalRenderRejectionCode(Exception failure){
+        String reason=Objects.toString(failure.getMessage(),"");
+        if(reason.matches("WORKBOOK_RENDER_[A-Z_]{1,90}"))return reason;
+        if("Workbook studio QA did not pass".equals(reason))return "WORKBOOK_RENDER_QA";
+        if("HOMEWORK_PDF_INVALID".equals(reason))return "HOMEWORK_PDF_INVALID";
+        if(failure instanceof IllegalArgumentException)return "WORKBOOK_RENDER_SCHEMA";
+        return null;
+    }
+
+    static String canonicalRenderRepairAdvice(String code){
+        return switch(code){
+            case "WORKBOOK_RENDER_SCHEMA" -> "The PDF schema rejected the draft. Use only documented block types, nonempty math, valid numeric fields and matching QA numbers.";
+            case "WORKBOOK_RENDER_INPUT" -> "The PDF executable rejected its input. Rebuild a minimal canonical JSON using the supplied example, supported block types, simple valid math and no optional layout fields.";
+            case "HOMEWORK_PDF_INVALID" -> "The output was not exactly one complete student A4 PDF and a separate nonempty teacher PDF. Shorten the draft and preserve six handwriting lines.";
+            case "WORKBOOK_RENDER_QA" -> "The renderer's mathematics or physical layout QA failed. Recheck all assertions and use short tasks with sufficient answer space.";
+            case "WORKBOOK_RENDER_FRACTION_STRIP" -> "The fraction strip has invalid numerator or denominator. Use positive integer denominator and numerator between zero and denominator, or another valid representation of the same skill.";
+            case "WORKBOOK_RENDER_VISUAL_SPEC" -> "The visual specification is invalid. Use the documented native visual type, valid ranges and required fields; retain required graph practice.";
+            case "WORKBOOK_RENDER_LAYOUT_SCHEMA" -> "A layout parameter is invalid. Remove optional split layout and custom size fields; use the default layout with six full-width handwriting lines.";
+            case "WORKBOOK_RENDER_MATH_ANSWER","WORKBOOK_RENDER_MATH_DOMAIN","WORKBOOK_RENDER_MATH_SYNTAX",
+                    "WORKBOOK_RENDER_MATH_LINEAR","WORKBOOK_RENDER_MATH_QA","WORKBOOK_RENDER_MATH_DISPLAY",
+                    "WORKBOOK_RENDER_LAYOUT_QA" -> repairFeedback(new IllegalArgumentException(code));
+            default -> "The renderer rejected the draft. Use the smallest supported canonical structure, preserve the practised skill and verify all math.";
+        };
     }
 
     static boolean containsGraphTask(Map<String,Object> content) {
