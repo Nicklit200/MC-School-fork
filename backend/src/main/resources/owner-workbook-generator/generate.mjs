@@ -58,6 +58,46 @@ normalizeLessonMath(lesson);
 validateLesson(lesson);
 const visualQa = prepareVisualTasks(lesson);
 const css = (await readFile(join(root, 'styles.css'), 'utf8')) + '\n' + layoutCss;
+let homeworkCompactLevel=0;
+function homeworkCompactCss(level) {
+  if(!level)return '';
+  // Reduce only decorative spacing and heading chrome. Never scale math,
+  // diagrams, handwriting areas, or the physical page.
+  const gap=level===1?'2mm':'1mm';
+  const heading=level===1?'15mm':'12mm';
+  return [
+    '.sheet.student.homework { padding-top: '+(level===1?'11mm':'8mm')+'; }',
+    '.sheet.student.homework .brandbar { height: 11mm; padding-bottom: 1mm; }',
+    '.sheet.student.homework .page-heading { height: auto; min-height: '+heading+'; padding-top: 1mm; padding-bottom: 1mm; }',
+    '.sheet.student.homework .page-heading h1 { font-size: 20px; margin-bottom: 1mm; }',
+    '.sheet.student.homework .paper-content { padding-top: 1mm; }',
+    '.sheet.student.homework .block, .sheet.student.homework .exercise { margin-top: '+gap+'; }',
+    '.sheet.student.homework .block:first-child { margin-top: 0; }',
+    '.sheet.student.homework .exercise { padding: 0; }',
+    '.sheet.student.homework .exercise-head { margin-bottom: 0.5mm; }',
+    '.sheet.student.homework .exercise-subtitle { margin-top: 0.5mm; }',
+    '.sheet.student.homework .callout { padding: 1mm 2mm; min-height: 0; }',
+    '.sheet.student.homework .callout p { margin: 0.5mm 0 0; }',
+    '.sheet.student.homework .rich-text, .sheet.student.homework .task-description { margin: 0.5mm 0; line-height: 1.35; }',
+    '.sheet.student.homework .task-row { min-height: 10mm; }',
+    '.sheet.student.homework .response-lines { margin: 1mm 0 0; }',
+    '.sheet.student.homework .example-box { min-height: 0; padding: 1mm 2mm; }',
+    '.sheet.student.homework .example-math-item { padding: 0.5mm 1mm; }',
+    '.sheet.student.homework .layout-spacer { height: 0 !important; }',
+    '.sheet.student.homework .layout-stack, .sheet.student.homework .layout-grid { gap: 1mm !important; }',
+    '.sheet.student.homework .mini-check { padding: 0.5mm 0; }',
+    '.sheet.student.homework .self-rating { margin: 1mm 0; }',
+    '.sheet.student.homework .footer { bottom: 9mm; padding-top: 1mm; }'
+  ].join('\n');
+}
+function recoverHomeworkLayout(report, level) {
+  if(level>=2 || !report || report.passed===true || !Array.isArray(report.issues))return false;
+  // Retry only measured vertical overflow. Keep all other QA failures fatal.
+  return report.issues.length>0 && report.issues.every(issue =>
+    /^Page \d+: (?:content overlaps footer|task overlaps footer|[a-zA-Z0-9_-]+ outside A4)$/.test(String(issue))
+  ) && report.issues.some(issue=>/overlaps footer/.test(issue));
+}
+
 validateLesson(lesson);
 
 function callout(b, tall = false) {
@@ -259,7 +299,7 @@ function teacherPage(p, idx, pages) {
   return `<article class="sheet teacher" data-page="${idx+1}">${c.top}${c.heading}<main class="paper-content">${p.blocks.map(teacherBlock).join('')}</main>${c.footer}</article>`;
 }
 function doc(body, title) {
-  return `<!doctype html><html lang="de"><head><meta charset="utf-8"><title>${richText(title)}</title><meta name="viewport" content="width=device-width, initial-scale=1"><style>${css}</style></head><body>${body}</body></html>`;
+  return `<!doctype html><html lang="de"><head><meta charset="utf-8"><title>${richText(title)}</title><meta name="viewport" content="width=device-width, initial-scale=1"><style>${css}\n${homeworkCompactCss(homeworkCompactLevel)}</style></head><body>${body}</body></html>`;
 }
 
 // Independent exact-rational verification of the teacher-answer chains.
@@ -411,15 +451,21 @@ if(process.argv.includes('--html-only')) {
       }));
       if(attempt===3 || reports.some(x=>!x))throw error;
       const studentReport=reports[0],teacherReport=reports[1];
-      const studentRecovery=lesson.meta.homeworkMode===true
-        ? {changed:false,pages:lesson.workbookPages}
-        : repackOverflowPages(lesson.workbookPages,studentReport,false);
+      let studentRecovery;
+      if(lesson.meta.homeworkMode===true){
+        const compacted=recoverHomeworkLayout(studentReport,homeworkCompactLevel);
+        if(compacted){
+          homeworkCompactLevel++;
+          console.log('Homework A4 spacing recovery level '+homeworkCompactLevel);
+        }
+        studentRecovery={changed:compacted,pages:lesson.workbookPages};
+      }else studentRecovery=repackOverflowPages(lesson.workbookPages,studentReport,false);
       const teacherRecovery=repackOverflowPages(lesson.teacherPages,teacherReport,true);
       if(!studentRecovery.changed && !teacherRecovery.changed)throw error;
       lesson.workbookPages=studentRecovery.pages;
       lesson.teacherPages=teacherRecovery.pages;
       pendingTargets=targets.filter((t,i)=>i===0 ? studentRecovery.changed : teacherRecovery.changed);
-      preflightPages(lesson.workbookPages,false);
+      if(lesson.meta.homeworkMode!==true)preflightPages(lesson.workbookPages,false);
       preflightPages(lesson.teacherPages,true);
       await writeFile(checkedLessonPath,JSON.stringify(lesson),'utf8');
       console.log('Auto-reflow after measured A4 layout error; attempt '+(attempt+1));
