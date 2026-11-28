@@ -32,8 +32,10 @@ final class McpHomeworkDraftValidator {
             throw new IllegalArgumentException("Homework lessonJson requires meta");
         if (!(doc.get("workbookPages") instanceof List<?> pages) || pages.size() != 1)
             throw new IllegalArgumentException("Homework day must have exactly one student A4 page");
-        if (!(doc.get("teacherPages") instanceof List<?> teacherPages) || teacherPages.isEmpty())
-            throw new IllegalArgumentException("Homework day must have private teacher answers");
+        boolean studentOnly=Boolean.TRUE.equals(rawMeta.get("homeworkStudentOnly"));
+        if (!(doc.get("teacherPages") instanceof List<?> teacherPages)
+                || (studentOnly ? !teacherPages.isEmpty() : teacherPages.isEmpty()))
+            throw new IllegalArgumentException("Homework teacherPages must match the selected rendering mode");
         if (!(pages.get(0) instanceof Map<?,?> page) || !(page.get("blocks") instanceof List<?> blocks))
             throw new IllegalArgumentException("Homework student page needs structured blocks");
         Map<String,Object> meta = new LinkedHashMap<>((Map<String,Object>)rawMeta);
