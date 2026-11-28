@@ -31,6 +31,7 @@ COPY src/main/resources/owner-workbook-generator/ /tmp/workbook-smoke/renderer/
 COPY src/test/resources/homework_generator_smoke.py /tmp/workbook-smoke/run.py
 COPY --from=build /app/target/homework-generator-smoke/ /tmp/workbook-smoke/fixtures/
 RUN ln -s /opt/mindcrafti-workbook/node_modules /tmp/workbook-smoke/renderer/node_modules && \
+    node --test /tmp/workbook-smoke/renderer/visual-tasks.test.mjs && \
     python3 /tmp/workbook-smoke/run.py /tmp/workbook-smoke/renderer /tmp/workbook-smoke/fixtures /tmp/workbook-smoke/output && \
     rm -rf /tmp/workbook-smoke
 
