@@ -92,7 +92,8 @@ def verify_homework_text_contrast(page, body_top, footer_top, drawings):
         light, dark = sorted((_luminance(effective), _luminance(background)), reverse=True)
         ratio = (light + .05) / (dark + .05)
         assert span.get('type') != 3 and ratio >= 3, (
-            f'Homework text contrast below 3:1 ({ratio:.2f}) on page {page.number + 1}')
+            f'Homework text contrast below 3:1 ({ratio:.2f}) on page {page.number + 1}; '
+            f'color={foreground}, background={background}, y={bbox.y0:.1f}')
 
 
 def verify_file(path, expected_count, plain=False, homework=False):
