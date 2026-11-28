@@ -549,7 +549,7 @@ public class PostLessonHomeworkContentService {
         return switch(code){
             case "WORKBOOK_RENDER_SCHEMA" -> "The PDF schema rejected the draft. Use only documented block types, nonempty math, valid numeric fields and matching QA numbers.";
             case "WORKBOOK_RENDER_INPUT" -> "The PDF executable rejected its input. Rebuild a minimal canonical JSON using the supplied example, supported block types, simple valid math and no optional layout fields.";
-            case "HOMEWORK_PDF_INVALID" -> "The output was not exactly one complete student A4 PDF and a separate nonempty teacher PDF. Shorten the draft and preserve six handwriting lines.";
+            case "HOMEWORK_PDF_INVALID" -> "The output must be exactly one complete student A4 PDF and no teacher solution document. Keep teacherPages empty, preserve six handwriting lines and internal mathematical QA.";
             case "WORKBOOK_RENDER_QA" -> "The renderer's mathematics or physical layout QA failed. Recheck all assertions and use short tasks with sufficient answer space.";
             case "WORKBOOK_RENDER_FRACTION_STRIP" -> "The fraction strip has invalid numerator or denominator. Use positive integer denominator and numerator between zero and denominator, or another valid representation of the same skill.";
             case "WORKBOOK_RENDER_VISUAL_SPEC" -> "The visual specification is invalid. Use the documented native visual type, valid ranges and required fields; retain required graph practice.";
