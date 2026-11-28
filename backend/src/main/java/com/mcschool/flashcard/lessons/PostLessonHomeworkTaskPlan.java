@@ -147,7 +147,11 @@ final class PostLessonHomeworkTaskPlan {
                 Map<String,Object> spec=map(task.get("visual"));
                 if(!Set.of("graph","geometry","fractionCircle").contains(spec.get("type")))throw invalid("VISUAL_TYPE");
                 spec.values().removeIf(Objects::isNull);
-                spec.put("language",independent?"de":"ru");
+                String language=Objects.toString(evidence.get("preferredLanguage"),"").toUpperCase(Locale.ROOT);
+                String notes=(Objects.toString(evidence.get("teacherNotes"),"")+" "+Objects.toString(evidence.get("personalTeacherNotes"),"")).toLowerCase(Locale.ROOT);
+                boolean german=independent||Set.of("DE","GERMAN","DEUTSCH","DE_DE").contains(language)
+                        ||notes.matches("(?s).*(?:nur deutsch|auf deutsch|на немецком|немецком языке).*");
+                spec.put("language",german?"de":"ru");
                 blocks.add(Map.of("type","visualTask","number",n,"title",title,"spec",spec));
                 blocks.add(Map.of("type","answerLines","lines",6,"spacing","8mm"));
                 checks.add(Map.of("number",n,"kind","visualValue"));
