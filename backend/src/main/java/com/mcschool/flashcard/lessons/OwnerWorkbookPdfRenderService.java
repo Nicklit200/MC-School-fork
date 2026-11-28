@@ -193,8 +193,17 @@ public class OwnerWorkbookPdfRenderService {
     }
 
     public StudioRender renderStudio(String lessonJson, String layoutJson) throws Exception {
+        return renderStudioInternal(lessonJson,layoutJson,false);
+    }
+
+    /** Homework waits for shared renderer capacity, without paying for a new AI request. */
+    StudioRender renderHomeworkStudio(String lessonJson) throws Exception {
+        return renderStudioInternal(lessonJson,activeLayout(),true);
+    }
+
+    private StudioRender renderStudioInternal(String lessonJson,String layoutJson,boolean waitForSlot) throws Exception {
         WorkbookGeneratorLayoutService.validate(layoutJson);
-        if (!renderSlots.tryAcquire())
+        if (!(waitForSlot ? renderSlots.tryAcquire(180,TimeUnit.SECONDS) : renderSlots.tryAcquire()))
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Workbook renderer busy");
         try {
             if (lessonJson == null || lessonJson.isBlank() || lessonJson.length() > MAX_INPUT_CHARS)
