@@ -4,6 +4,7 @@ import { api } from '../../api/client';
 import type { Homework } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
+import { formatHomeworkDate, schoolHomeworkDate, splitStudentHomeworks } from '../../lib/studentHomeworkSections';
 
 export function StudentHomeworksListPage() {
   const { language, t } = useI18n();
@@ -18,13 +19,12 @@ export function StudentHomeworksListPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const today = localDateString(new Date());
-  const homeworks = useMemo(
-    () => (items ?? [])
-      .filter((item) => item.hasWorksheet && (item.startDate === today || item.overdue))
-      .sort((a, b) => a.startDate.localeCompare(b.startDate) || (a.createdAt ?? '').localeCompare(b.createdAt ?? '')),
-    [items, today],
-  );
+  const today = schoolHomeworkDate();
+  const sections = useMemo(() => splitStudentHomeworks(items ?? [], today, true), [items, today]);
+  const groups = [
+    { label: language === 'DE' ? 'Heute' : 'Сегодня', items: sections.today },
+    { label: language === 'DE' ? 'Überfällige Hausaufgaben' : 'Просроченные задания', items: sections.overdue },
+  ];
 
   if (error) return <div className="banner banner--error">{error}</div>;
   if (!items) return <p className="muted">{t('common.loading')}</p>;
@@ -32,13 +32,16 @@ export function StudentHomeworksListPage() {
   return (
     <div>
       <h1>{language === 'DE' ? 'Hausaufgaben' : 'Домашние задания'}</h1>
-      {homeworks.length === 0 ? (
+      {sections.today.length + sections.overdue.length === 0 ? (
         <p className="muted">
           {language === 'DE' ? 'Es gibt keine offenen Hausaufgaben.' : 'Нет невыполненной домашки.'}
         </p>
       ) : (
-        <div className="panel stack">
-          {homeworks.map((homework) => (
+        <div className="stack">
+          {groups.filter(group => group.items.length > 0).map(group => (
+            <section className="panel stack" key={group.label} aria-label={group.label}>
+              <h2 style={{ margin: 0 }}>{group.label}</h2>
+              {group.items.map((homework) => (
             <Link
               key={homework.id}
               className="list-row"
@@ -46,7 +49,7 @@ export function StudentHomeworksListPage() {
               style={{ textDecoration: 'none' }}
             >
               <div>
-                <div className="list-row__title">{formatDate(homework.startDate, language)}</div>
+                <div className="list-row__title">{formatHomeworkDate(homework.startDate, language)}</div>
                 <div className="muted">
                   {homework.worksheetFilename ?? (language === 'DE' ? 'PDF-Hausaufgabe' : 'Домашка в PDF')}
                   {homework.worksheetPageCount
@@ -62,6 +65,8 @@ export function StudentHomeworksListPage() {
                     : (language === 'DE' ? 'Heute bis 19:00' : 'Сдать сегодня до 19:00')}
               </span>
             </Link>
+              ))}
+            </section>
           ))}
         </div>
       )}
@@ -69,17 +74,3 @@ export function StudentHomeworksListPage() {
   );
 }
 
-function localDateString(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function formatDate(date: string, language: 'DE' | 'RU') {
-  return new Intl.DateTimeFormat(language === 'DE' ? 'de-DE' : 'ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).format(new Date(`${date}T00:00:00`));
-}

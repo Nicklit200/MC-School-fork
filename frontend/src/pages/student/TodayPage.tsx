@@ -4,6 +4,7 @@ import { api } from '../../api/client';
 import type { Homework, SessionType, Today } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
+import { formatHomeworkDate, schoolHomeworkDate, splitStudentHomeworks } from '../../lib/studentHomeworkSections';
 
 /** Student home: today's card review and today's PDF homework are separate tasks. */
 export function TodayPage() {
@@ -24,21 +25,13 @@ export function TodayPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const openHomeworks = useMemo(() => {
-    const todayDate = localDateString(new Date());
-    return homeworks
-      .filter(
-        (homework) =>
-          homework.hasWorksheet &&
-          !homework.submitted &&
-          (homework.startDate === todayDate || homework.overdue),
-      )
-      .sort(
-        (a, b) =>
-          a.startDate.localeCompare(b.startDate) ||
-          (a.createdAt ?? '').localeCompare(b.createdAt ?? ''),
-      );
-  }, [homeworks]);
+  const todayDate = schoolHomeworkDate();
+  const homeworkSections = useMemo(() => splitStudentHomeworks(homeworks, todayDate), [homeworks, todayDate]);
+  const openHomeworkCount = homeworkSections.today.length + homeworkSections.overdue.length;
+  const homeworkGroups = [
+    { label: language === 'DE' ? 'Heute' : 'Сегодня', items: homeworkSections.today },
+    { label: language === 'DE' ? 'Überfällige Hausaufgaben' : 'Просроченные задания', items: homeworkSections.overdue },
+  ];
 
   async function start(type: SessionType) {
     setError(null);
@@ -81,13 +74,18 @@ export function TodayPage() {
         </section>
         <section className="panel student-today__homework">
           <h2>{language === 'DE' ? 'Hausaufgabe heute' : 'Домашка сегодня'}</h2>
-          {openHomeworks.length === 0 ? <div className="banner banner--success">{language === 'DE' ? 'Keine offene Hausaufgabe 🎉' : 'Невыполненной домашки нет 🎉'}</div> : <>
-            <div className="center"><div className="result__stat">{openHomeworks.length}</div><div className="muted">{language === 'DE' ? 'Offene Hausaufgaben' : 'Невыполненных домашних заданий'}</div></div>
-            {openHomeworks.map(homework => <Link key={homework.id} className="list-row" to={`/student/homeworks/${homework.id}/worksheet`}>
+          {openHomeworkCount === 0 ? <div className="banner banner--success">{language === 'DE' ? 'Keine offene Hausaufgabe 🎉' : 'Невыполненной домашки нет 🎉'}</div> : <>
+            <div className="center"><div className="result__stat">{openHomeworkCount}</div><div className="muted">{language === 'DE' ? 'Offene Hausaufgaben' : 'Невыполненных домашних заданий'}</div></div>
+            {homeworkGroups.filter(group => group.items.length > 0).map(group => (
+              <section key={group.label} aria-label={group.label}>
+                <h3>{group.label}</h3>
+                {group.items.map(homework => <Link key={homework.id} className="list-row" to={`/student/homeworks/${homework.id}/worksheet`}>
               <div><div className="list-row__title">{homework.worksheetFilename ?? (language === 'DE' ? 'PDF-Hausaufgabe' : 'Домашка в PDF')}</div>
-                <div className="muted">{homework.worksheetPageCount ? `${homework.worksheetPageCount} ${language === 'DE' ? 'Seiten' : 'стр.'}` : ''}</div></div>
+                <div className="muted">{formatHomeworkDate(homework.startDate, language)}{homework.worksheetPageCount ? ` · ${homework.worksheetPageCount} ${language === 'DE' ? 'Seiten' : 'стр.'}` : ''}</div></div>
               <span className={`pill ${homework.overdue ? 'pill--danger' : 'pill--pending'}`}>{homework.overdue ? (language === 'DE' ? 'Überfällig — trotzdem erledigen' : 'Просрочено — всё равно нужно сделать') : (language === 'DE' ? 'Zu erledigen' : 'Нужно сделать')}</span>
-            </Link>)}
+                </Link>)}
+              </section>
+            ))}
           </>}
         </section>
       </div>
@@ -95,9 +93,3 @@ export function TodayPage() {
   );
 }
 
-function localDateString(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}

@@ -44,6 +44,10 @@ describe('student today tasks', () => {
     mount();
     expect(await screen.findByRole('link', { name: /today\.pdf/ })).toHaveAttribute('href', '/student/homeworks/today/worksheet');
     expect(screen.getByRole('link', { name: /overdue\.pdf/ })).toHaveAttribute('href', '/student/homeworks/overdue/worksheet');
+    expect(screen.getAllByRole('link').filter(link => link.getAttribute('href')?.endsWith('/worksheet')).map(link => link.getAttribute('href')))
+      .toEqual(['/student/homeworks/today/worksheet', '/student/homeworks/overdue/worksheet']);
+    expect(screen.getByRole('region', { name: 'Сегодня' })).toHaveTextContent('today.pdf');
+    expect(screen.getByRole('region', { name: 'Просроченные задания' })).toHaveTextContent('overdue.pdf');
     for (const name of ['submitted.pdf', 'future.pdf', 'cards.pdf']) expect(screen.queryByText(name)).not.toBeInTheDocument();
   });
 
