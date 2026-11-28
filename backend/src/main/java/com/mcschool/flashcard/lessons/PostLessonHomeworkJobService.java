@@ -247,6 +247,10 @@ public class PostLessonHomeworkJobService {
         String code=PostLessonHomeworkFailure.code(failure);
         // A worker from an expired lease must not fail a newer retry or a published job.
         try {
+            if(worker.isShutdown()&&"INTERRUPTED".equals(code)){
+                int recovered=db.update("UPDATE post_lesson_homework_jobs SET state='QUEUED',failure_code=NULL,worker_id=NULL,lease_until=NULL,interruption_retries=interruption_retries+1,updated_at=now() WHERE id=? AND state='RUNNING' AND worker_id=? AND interruption_retries<1",jobId,workerId);
+                if(recovered==1)return;
+            }
             int changed=db.update("UPDATE post_lesson_homework_jobs SET state='FAILED',failure_code=?,worker_id=NULL,lease_until=NULL,finished_at=now(),updated_at=now() WHERE id=? AND state='RUNNING' AND worker_id=?",code,jobId,workerId);
             if(changed>0) safeNotify(jobId);
         } catch (RuntimeException persistenceFailure) {
@@ -364,8 +368,7 @@ public class PostLessonHomeworkJobService {
         for(int currentDay:missing){
             Map<String,Object> plan=plans.get(currentDay);
             if(plan==null)throw new IllegalStateException("HOMEWORK_DRAFT_VALIDATION_FAILED");
-            PostLessonHomeworkContentService.GeneratedHomework generated=generator.renderPreparedDay(plan,
-                    stage->progress(job,stage,currentDay));
+            PostLessonHomeworkContentService.GeneratedHomework generated=renderWithContentRepair(job,teacher,id,name,note,currentDay,plan,plans);
             OwnerWorkbookPdfRenderService.StudioRender pair=generated.pdf();
             progress(job,PostLessonHomeworkStage.PDF_STORAGE,currentDay);
             UUID draft=UUID.randomUUID();
@@ -377,6 +380,50 @@ public class PostLessonHomeworkJobService {
                 int count=db.queryForObject("SELECT count(*) FROM post_lesson_homework_drafts WHERE job_id=?",Integer.class,job.id());
                 db.update("UPDATE post_lesson_homework_jobs SET generated_files=?,updated_at=now() WHERE id=?",count,job.id());
             });
+        }
+    }
+
+    /** A persisted mathematical rejection may request new content for this day only.
+     * Layout errors, capacity and infrastructure failures never trigger another paid request.
+     * Reserve the one repair durably before calling the model. */
+    @SuppressWarnings("unchecked")
+    private PostLessonHomeworkContentService.GeneratedHomework renderWithContentRepair(
+            Job job,AuthenticatedUser teacher,UUID id,String name,String note,int day,
+            Map<String,Object> plan,Map<Integer,Map<String,Object>> plans)throws Exception{
+        try{
+            return generator.renderPreparedDay(plan,stage->progress(job,stage,day));
+        }catch(IllegalArgumentException|IllegalStateException failed){
+            String code=PostLessonHomeworkContentService.canonicalRenderRejectionCode(failed);
+            if(code==null||!PostLessonHomeworkContentService.repairableTaskContent(code))throw failed;
+            Boolean reserved=tx.execute(st->{
+                if(publishedOrRequireOwnership(job.id()))throw new IllegalStateException("HOMEWORK_JOB_LEASE_LOST");
+                return db.update("UPDATE post_lesson_homework_task_plans SET repair_count=1 WHERE job_id=? AND student_id=? AND day_number=? AND repair_count=0",job.id(),id,day)==1;
+            });
+            if(!Boolean.TRUE.equals(reserved))throw failed;
+            progress(job,PostLessonHomeworkStage.LESSON_EVIDENCE,day);
+            Map<String,Object> evidence=tx.execute(st->studentEvidence(teacher,job,id,day,note));
+            List<Map<String,Object>> history=new ArrayList<>(priorGeneratedHomework(job.id(),id));
+            Set<Integer> renderedDays=new HashSet<>();
+            for(Map<String,Object> earlier:history)renderedDays.add(((Number)earlier.get("day")).intValue());
+            for(var entry:plans.entrySet())if(entry.getKey()!=day&&!renderedDays.contains(entry.getKey())){
+                Map<String,Object> primary=(Map<String,Object>)entry.getValue().get("primary");
+                Map<String,Object> review=(Map<String,Object>)primary.get("review");
+                history.add(Map.of("day",entry.getKey(),"tasks",review.get("tasks")));
+            }
+            evidence.put("previousGeneratedHomework",history);
+            evidence.put("repairReason",PostLessonHomeworkContentService.canonicalRenderRepairAdvice(code));
+            LOG.warn("Homework single-day content repair job={} day={} code={}",job.id(),day,code);
+            List<Map<String,Object>> replacement=generator.prepareTaskSeries(evidence,List.of(day),job.days(),name,
+                    stage->progress(job,stage,day),1);
+            Map<String,Object> updated=replacement.get(0);
+            tx.executeWithoutResult(st->{
+                if(publishedOrRequireOwnership(job.id()))throw new IllegalStateException("HOMEWORK_JOB_LEASE_LOST");
+                int changed=db.update("UPDATE post_lesson_homework_task_plans SET plan_json=? WHERE job_id=? AND student_id=? AND day_number=? AND repair_count=1",
+                        json.writeValueAsString(updated),job.id(),id,day);
+                if(changed!=1)throw new IllegalStateException("HOMEWORK_JOB_LEASE_LOST");
+            });
+            plans.put(day,updated);
+            return generator.renderPreparedDay(updated,stage->progress(job,stage,day));
         }
     }
 
