@@ -230,7 +230,7 @@ export function prepareVisualTasks(lesson) {
   // Two SVGs plus answer callouts can overflow the printable area despite
   // passing the coarse weight estimate; --plain also skips auto-pagination.
   if(referenceDiagrams.length && Array.isArray(lesson.teacherPages)
-      && !(lesson.meta.homeworkMode===true && lesson.meta.homeworkStudentOnly===true)){
+      && !(lesson.meta?.homeworkMode===true && lesson.meta?.homeworkStudentOnly===true)){
     if(lesson.teacherPages.length + referenceDiagrams.length > 20)
       throw Error('Too many teacher pages for visual reference diagrams; reduce visual tasks or combine existing answer pages');
     for(let start=0;start<referenceDiagrams.length;start+=1){
