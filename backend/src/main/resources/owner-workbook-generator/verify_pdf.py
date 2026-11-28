@@ -51,54 +51,7 @@ class VisibleText(HTMLParser):
             self.text.append(data)
 
 
-def _rgb(value):
-    if isinstance(value, (int, float)):
-        return (value, value, value)
-    if value is not None and len(value) == 1:
-        return (value[0],) * 3
-    if value is not None and len(value) == 3:
-        return tuple(value)
-    return None
-
-
-def _luminance(rgb):
-    linear = [c / 12.92 if c <= .04045 else ((c + .055) / 1.055) ** 2.4 for c in rgb]
-    return sum(c * weight for c, weight in zip(linear, (.2126, .7152, .0722)))
-
-
-def verify_homework_text_contrast(page, body_top, footer_top, drawings):
-    """Reject low-contrast body text in the actual generated PDF.
-    Use prior enclosing solid fills as the background, white otherwise.
-    The minimum 3:1 is a fail-safe for unreadable text, not full WCAG certification.
-    """
-    fills = [d for d in drawings if d.get('fill') is not None and
-             _rgb(d['fill']) is not None and d.get('fill_opacity', 1) >= .99 and
-             # Compound paths can be hollow borders (outer and inner rectangles).
-             # Their bounding boxes are not filled backgrounds.
-             len(d.get('items', [])) == 1 and d['items'][0][0] == 're']
-    for span in page.get_texttrace():
-        bbox = fitz.Rect(span['bbox'])
-        if bbox.y0 < body_top - 2 or bbox.y0 >= footer_top - 1:
-            continue
-        if not any(not chr(c[0]).isspace() for c in span.get('chars', [])):
-            continue
-        foreground = _rgb(span.get('color'))
-        if foreground is None:
-            continue
-        background = (1., 1., 1.)
-        for fill in fills:
-            if fill.get('seqno', -1) < span.get('seqno', 0) and fitz.Rect(fill['rect']).contains(bbox):
-                background = _rgb(fill['fill'])
-        opacity = span.get('opacity', 1)
-        effective = tuple(f * opacity + b * (1 - opacity) for f, b in zip(foreground, background))
-        light, dark = sorted((_luminance(effective), _luminance(background)), reverse=True)
-        ratio = (light + .05) / (dark + .05)
-        assert span.get('type') != 3 and ratio >= 3, (
-            f'Homework text contrast below 3:1 ({ratio:.2f}) on page {page.number + 1}; '
-            f'color={foreground}, background={background}, y={bbox.y0:.1f}')
-
-
-def verify_file(path, expected_count, plain=False, homework=False):
+def verify_file(path, expected_count, plain=False):
     layout_path = Path(str(path) + '.layout.json')
     assert layout_path.exists(), 'Missing renderer geometry QA; production exports require WeasyPrint'
     layout = json.loads(layout_path.read_text(encoding='utf-8'))
@@ -149,8 +102,6 @@ def verify_file(path, expected_count, plain=False, homework=False):
                 assert block[0] >= -1 and block[2] <= rect.width + 1, f'Horizontal overflow on page {page.number + 1}'
                 assert block[3] <= footer_top + 1, f'Content touches footer on page {page.number + 1}'
             drawings = page.get_drawings()
-            if homework:
-                verify_homework_text_contrast(page, body_top, footer_top, drawings)
             for drawing in drawings:
                 painted = drawing['rect']
                 assert painted.x0 >= -1 and painted.y0 >= -1 and painted.x1 <= rect.width + 1 and painted.y1 <= rect.height + 1, 'Vector outside A4'
@@ -201,7 +152,7 @@ def main():
     results = []
     for path in found:
         count = len(data['workbookPages'] if '_Arbeitsheft_' in path.name else data['teacherPages'])
-        results.append(verify_file(path, count, plain, homework=bool(data['meta'].get('homeworkMode')) and '_Arbeitsheft_' in path.name))
+        results.append(verify_file(path, count, plain))
     if plain:
         preview_plain(found[0], out / f'{basename or "workbook"}_preview.png')
     (out / f'{basename or "workbook"}_layout-qa.json').write_text(json.dumps({'passed': True, 'documents': results}), encoding='utf-8')

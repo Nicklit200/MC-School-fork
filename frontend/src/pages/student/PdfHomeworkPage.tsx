@@ -4,7 +4,6 @@ import { api } from '../../api/client';
 import type { Homework } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { toErrorMessage } from '../../lib/errors';
-import { formatHomeworkDate } from '../../lib/studentHomeworkSections';
 import { renderHomeworkInkStroke } from '../../lib/homeworkInk';
 import { attachTabletInkInput, type TabletInkPoint } from '../../lib/tabletInkInput';
 import { BoardToolbar } from '../../features/online-classes/BoardToolbar';
@@ -201,7 +200,7 @@ export function PdfHomeworkPage({ onSubmitted }: { onSubmitted?: () => void } = 
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div style={{ minWidth: 0 }}>
           <Link to={`/student/homeworks/${homeworkId}`} className="muted">← {t('common.back')}</Link>
-          <h1 style={{ margin: '8px 0 2px' }}>{language === 'DE' ? 'Hausaufgabe' : 'Домашка'} · {formatHomeworkDate(homework.startDate, language)}</h1>
+          <h1 style={{ margin: '8px 0 2px' }}>{language === 'DE' ? 'Hausaufgabe' : 'Домашка'}</h1>
           <div className="muted" style={{ overflowWrap: 'anywhere' }}>{homework.worksheetFilename}</div>
         </div>
         <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -262,7 +261,7 @@ export function PdfHomeworkPage({ onSubmitted }: { onSubmitted?: () => void } = 
       <div className="pdf-homework-pages" aria-label={language === 'DE' ? 'PDF-Seiten' : 'Страницы PDF'}>
         {Array.from({ length: pageCount }, (_, index) => (
           <WorksheetPage key={`${homeworkId}:${index}:${homework.submitted ? 'submitted' : 'draft'}`}
-            homeworkId={homeworkId} assignedDate={homework.startDate} pageIndex={index} pageCount={pageCount}
+            homeworkId={homeworkId} pageIndex={index} pageCount={pageCount}
             active={pageIndex === index} language={language} loadingText={t('common.loading')}
             elementRef={(element) => { pageElements.current[index] = element; }}
             onActivate={() => setPageIndex(index)}>
@@ -308,9 +307,8 @@ export function PdfHomeworkPage({ onSubmitted }: { onSubmitted?: () => void } = 
   );
 }
 
-function WorksheetPage({ homeworkId, assignedDate, pageIndex, pageCount, active, language, loadingText, elementRef, onActivate, children }: {
+function WorksheetPage({ homeworkId, pageIndex, pageCount, active, language, loadingText, elementRef, onActivate, children }: {
   homeworkId: string;
-  assignedDate: string;
   pageIndex: number;
   pageCount: number;
   active: boolean;
@@ -360,7 +358,7 @@ function WorksheetPage({ homeworkId, assignedDate, pageIndex, pageCount, active,
     <section className="pdf-homework-sheet" aria-label={label} data-page-index={pageIndex}
       ref={(target) => { element.current = target; elementRef(target); }}
       onPointerDownCapture={onActivate} onTouchStartCapture={onActivate} onFocusCapture={onActivate}>
-      <div className="pdf-homework-sheet-label">{formatHomeworkDate(assignedDate, language)} · {label} / {pageCount}</div>
+      <div className="pdf-homework-sheet-label">{label} / {pageCount}</div>
       {pageUrl ? children(pageUrl) : (
         <div className="pdf-homework-sheet-placeholder" aria-busy={!error}>
           {error ? <div className="banner banner--error" role="alert">

@@ -118,8 +118,6 @@ describe('PDF homework as one vertical document', () => {
   it('keeps every page in document order and loads images only near the viewport', async () => {
     open();
     await screen.findByRole('img', { name: 'Страница PDF 1' });
-    expect(screen.getByRole('heading', { name: 'Домашка · 02.11.2026' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Страница 1' })).toHaveTextContent('02.11.2026');
     expect(screen.getAllByRole('region').map((section) => section.getAttribute('data-page-index')))
       .toEqual(['0', '1', '2']);
     expect(mocks.page).toHaveBeenCalledTimes(1);

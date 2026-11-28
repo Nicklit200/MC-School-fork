@@ -518,13 +518,3 @@ body { font-family: Inter, Arial, 'Liberation Sans', sans-serif; -webkit-print-c
 .sheet.student.plain .diagram-eyebrow {
   color: var(--orange);
 }
-
-/* Homework text must remain readable even on warm-tinted backgrounds.
-   Keep decorative strokes in the original brand orange. */
-.sheet.student.homework { --orange: #9d3b00; color: #070a20; }
-.sheet.student.homework:not(.plain) .page-heading h1,
-.sheet.student.homework:not(.plain) .exercise-number,
-.sheet.student.homework:not(.plain) .callout .eyebrow,
-.sheet.student.homework .school-name { color: #9d3b00; }
-.sheet.student.homework svg text[fill="#ff6a00"] { fill: #9d3b00; }
-.sheet.student.homework .brandbar { border-color: #ff6a00; }
