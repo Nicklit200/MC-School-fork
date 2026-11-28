@@ -202,6 +202,7 @@ public class OwnerWorkbookPdfRenderService {
             @SuppressWarnings("unchecked")
             Map<String, Object> document = mapper.readValue(lessonJson, Map.class);
             validateDocument(document);
+            boolean studentOnly = studentOnlyHomework(document);
             Path runtime = runtimeDirectory();
             Path workspace = Files.createTempDirectory("mindcrafti-workbook-studio-");
             try {
@@ -222,10 +223,10 @@ public class OwnerWorkbookPdfRenderService {
                 runStudioProcess(process, workspace.resolve("renderer.log"));
                 Path studentPath = output.resolve(basename + "_Arbeitsheft_" + minutes + "min.pdf");
                 Path teacherPath = output.resolve(basename + "_Lehrerloesungen_" + minutes + "min.pdf");
-                if (Files.size(studentPath) > MAX_DOCUMENT_BYTES || Files.size(teacherPath) > MAX_DOCUMENT_BYTES)
+                if (Files.size(studentPath) > MAX_DOCUMENT_BYTES || (!studentOnly && Files.size(teacherPath) > MAX_DOCUMENT_BYTES))
                     throw new IllegalArgumentException("Studio PDF exceeds 15 MB");
                 byte[] student = Files.readAllBytes(studentPath);
-                byte[] teacher = Files.readAllBytes(teacherPath);
+                byte[] teacher = studentOnly ? new byte[0] : Files.readAllBytes(teacherPath);
                 @SuppressWarnings("unchecked")
                 Map<String, Object> math = mapper.readValue(
                         Files.readString(output.resolve(basename + "_math-qa.json")), Map.class);
@@ -235,11 +236,11 @@ public class OwnerWorkbookPdfRenderService {
                 if (!Boolean.TRUE.equals(math.get("passed")) || !Boolean.TRUE.equals(layout.get("passed")))
                     throw new IllegalStateException("Workbook studio QA did not pass");
                 try (PDDocument studentDocument = Loader.loadPDF(student);
-                     PDDocument teacherDocument = Loader.loadPDF(teacher)) {
-                    if (studentDocument.isEncrypted() || teacherDocument.isEncrypted())
+                     PDDocument teacherDocument = studentOnly ? null : Loader.loadPDF(teacher)) {
+                    if (studentDocument.isEncrypted() || (teacherDocument != null && teacherDocument.isEncrypted()))
                         throw new IllegalStateException("Generated PDFs must not be encrypted");
                     return new StudioRender(student, teacher, studentDocument.getNumberOfPages(),
-                            teacherDocument.getNumberOfPages(), Map.of(
+                            teacherDocument == null ? 0 : teacherDocument.getNumberOfPages(), Map.of(
                                     "mathPassed", true, "layoutPassed", true,
                                     "algebraChecked", math.getOrDefault("checked", 0),
                                     "graphWarnings", math.getOrDefault("graphWarnings", List.of())));
@@ -386,6 +387,7 @@ public class OwnerWorkbookPdfRenderService {
         @SuppressWarnings("unchecked")
         Map<String, Object> document = mapper.readValue(lessonJson, Map.class);
         int exerciseCount = validateDocument(document);
+        if(studentOnlyHomework(document))throw new IllegalArgumentException("Student-only homework belongs to the dedicated homework workflow");
 
         // Branded text and orange header remain, but all workbook image logos are disabled.
         // Do not fetch or rasterize the Brand Guide PDF for each generated worksheet.
@@ -493,6 +495,11 @@ public class OwnerWorkbookPdfRenderService {
         } catch (IOException ignored) { }
     }
 
+    static boolean studentOnlyHomework(Map<String,Object> document){
+        return document.get("meta") instanceof Map<?,?> meta && Boolean.TRUE.equals(meta.get("homeworkMode"))
+                && Boolean.TRUE.equals(meta.get("homeworkStudentOnly"));
+    }
+
     static int validateDocument(Map<String, Object> document) {
         for (String key : List.of("homework", "homeworkDays", "homeworkPdf", "assignment")) {
             if (document.containsKey(key))
@@ -511,7 +518,12 @@ public class OwnerWorkbookPdfRenderService {
         // the same schema bounds as schema.mjs.
         validateSpacerLimits(document, 0);
         List<?> studentPages = requirePages(document.get("workbookPages"), "workbookPages", 18);
-        List<?> teacherPages = requirePages(document.get("teacherPages"), "teacherPages", 12);
+        List<?> teacherPages;
+        if(studentOnlyHomework(document)){
+            if(!(document.get("teacherPages") instanceof List<?> pages) || !pages.isEmpty())
+                throw new IllegalArgumentException("Student-only homework requires empty teacherPages");
+            teacherPages=pages;
+        } else teacherPages = requirePages(document.get("teacherPages"), "teacherPages", 12);
         int count = 0;
         for (Object page : studentPages) {
             Map<?, ?> p = requireMap(page, "student page");
