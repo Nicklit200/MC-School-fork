@@ -437,7 +437,7 @@ public class PostLessonHomeworkContentService {
                 +"worked tasks and their difficulty, not early problems skipped as too easy. "
                 +"Respect the same mathematical and vector drawing capabilities as our "
                 +"lesson workbooks. Keep one A4 page, up to two tasks, <=10 minutes, "
-                +"private answers and verified math.";
+                +"no teacher solution document, internal QA only and verified math.";
         if(requireGraph)
             instruction+=" A real programmatically rendered graph from the SAME school "
                     +"workbook engine is MANDATORY today; numerical substitution without "
@@ -454,7 +454,7 @@ public class PostLessonHomeworkContentService {
                         +"or a single native visualTask, and six full-width handwriting lines. "
                         +"Use the simplest supported representation, no split layouts, decorative "
                         +"diagrams, optional complex blocks, or additional exercises. "
-                        +"Keep required native graphs or geometry, language, private answers, "
+                        +"Keep required native graphs or geometry, language, empty teacherPages, "
                         +"exact mathematical QA, and one-page A4 validation. "
                         +"Use different values from earlier days; do not copy their exercises.";
                 LOG.info("Homework entering simplified recovery: day={} attempt={} max={}",day,attempt,maxAttempts);
@@ -508,8 +508,8 @@ public class PostLessonHomeworkContentService {
             progress.accept(PostLessonHomeworkStage.PDF_RENDER);
             try{
                 OwnerWorkbookPdfRenderService.StudioRender pdf=renderer.renderStudio(authored.lessonJson());
-                if(pdf.studentPages()!=1 || pdf.teacherPages()<1
-                        ||pdf.studentPdf().length<100 || pdf.teacherPdf().length<100)
+                if(pdf.studentPages()!=1 || pdf.teacherPages()!=0
+                        ||pdf.studentPdf().length<100 || pdf.teacherPdf().length!=0)
                     throw new IllegalArgumentException("HOMEWORK_PDF_INVALID");
                 if(simplified)LOG.info("Homework simplified recovery succeeded: day={} attempt={}",day,attempt);
                 return new GeneratedHomework(pdf,checked.review());
@@ -549,7 +549,7 @@ public class PostLessonHomeworkContentService {
         return switch(code){
             case "WORKBOOK_RENDER_SCHEMA" -> "The PDF schema rejected the draft. Use only documented block types, nonempty math, valid numeric fields and matching QA numbers.";
             case "WORKBOOK_RENDER_INPUT" -> "The PDF executable rejected its input. Rebuild a minimal canonical JSON using the supplied example, supported block types, simple valid math and no optional layout fields.";
-            case "HOMEWORK_PDF_INVALID" -> "The output was not exactly one complete student A4 PDF and a separate nonempty teacher PDF. Shorten the draft and preserve six handwriting lines.";
+            case "HOMEWORK_PDF_INVALID" -> "The output must be exactly one complete student A4 PDF and no teacher solution document. Keep teacherPages empty, preserve six handwriting lines and internal mathematical QA.";
             case "WORKBOOK_RENDER_QA" -> "The renderer's mathematics or physical layout QA failed. Recheck all assertions and use short tasks with sufficient answer space.";
             case "WORKBOOK_RENDER_FRACTION_STRIP" -> "The fraction strip has invalid numerator or denominator. Use positive integer denominator and numerator between zero and denominator, or another valid representation of the same skill.";
             case "WORKBOOK_RENDER_VISUAL_SPEC" -> "The visual specification is invalid. Use the documented native visual type, valid ranges and required fields; retain required graph practice.";

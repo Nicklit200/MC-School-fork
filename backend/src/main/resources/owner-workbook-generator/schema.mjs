@@ -65,7 +65,7 @@ export function validateLesson(data) {
     for(const child of Object.values(v))walk(child,depth+1);
   }
   walk(data);
-  if(!data?.meta || !Array.isArray(data.workbookPages) || !Array.isArray(data.teacherPages) || data.workbookPages.length<1 || data.workbookPages.length>35 || data.teacherPages.length<1 || data.teacherPages.length>20)throw new TypeError('Invalid lesson pages');
+  if(!data?.meta || !Array.isArray(data.workbookPages) || !Array.isArray(data.teacherPages) || data.workbookPages.length<1 || data.workbookPages.length>35 || (data.meta.homeworkMode===true && data.meta.homeworkStudentOnly===true ? data.teacherPages.length!==0 : data.teacherPages.length<1 || data.teacherPages.length>20))throw new TypeError('Invalid lesson pages');
   integer(data.meta.durationMinutes,undefined,30,240);
   function blocks(items,depth=0) {
     if(!Array.isArray(items) || items.length>80 || depth>12)throw new TypeError('Invalid block list');

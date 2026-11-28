@@ -111,6 +111,8 @@ public class WorkbookContentService {
                         "Use lesson-language rules from homeworkPrompt: Russian explanations only on days 1..4, German only on days 5..7.")
                 .replace("Every page must have title, subtitle, blocks. Keep each A4 page comfortably within one page, 2-3 tasks maximum.",
                         "Use exactly ONE student A4 page for this day, ONE or TWO short independent tasks, under TEN minutes including reading.")
+                .replace("Keep student and teacher answers strictly separate.", "For homework return teacherPages: []; do not author teacher solutions. Keep exact answers only in internal qa.algebra.")
+                .replace("Teacher blocks additionally support teacherNote {label,title,paragraphs:[]}, solutions {section,title,items:[{label,math,text,note}]}.", "Do not author teacher blocks or a teacher answer document.")
                 .replace("meta.durationMinutes must equal calendarDurationMinutes.",
                         "meta.durationMinutes must be 30 and meta.homeworkEstimatedMinutes must be 1..10.")
                 .replace("{\"kind\":\"equivalence\",", "{\"number\":1,\"kind\":\"equivalence\",")
@@ -129,7 +131,7 @@ public class WorkbookContentService {
                 Derive variations on the practice already completed, not new skills.
                 Respect only this pupil's private completed board and shared classroom.
                 Use the SAME full structured lessonJson with meta, workbookPages,
-                teacherPages and qa.algebra as the normal lesson-workbook author.
+                teacherPages and qa.algebra as the normal lesson-workbook author, but teacherPages MUST be [].
                 Student workbookPages must have exactly one page, with exactly 1..2
                 numbered independent tasks (1 if graph/geometry occupies the page).
                 For days 1..4 put a short Russian scaffold at the very top while
@@ -162,8 +164,7 @@ public class WorkbookContentService {
                 inserting a placeholder. Actual math and QA may never be omitted.
                 Graph visualTask uses an exact spec and a separate answerLines
                 block with lines:6 and spacing:"8mm".
-                Separate private teacherPages must provide correct teacher answers;
-                never show solutions in workbookPages.
+                Do not create teacherPages content: return an empty array. Keep exact answers only in internal qa.algebra for server verification; never show solutions in workbookPages.
                 Do not show student names, dates, Tag/day numbers or internal metadata
                 in the pupil PDF. Output only the same structured lessonJson envelope.
                 In STAFF-ONLY lessonPlan text, cite which actual transcript segment,
@@ -205,13 +206,13 @@ public class WorkbookContentService {
                     "previousAttempt", attempt - 1,
                     "failureType", lastContentError == null ? "INVALID_CONTENT" : lastContentError.getClass().getSimpleName(),
                     "instruction", (homework==null ? "" : homeworkRepairAdvice(lastContentError) + " " +
-                            "Keep EXACTLY one daily A4 pupil page, 1..2 tasks, max 10 minutes, private answers, "
+                            "Keep EXACTLY one daily A4 pupil page, 1..2 tasks, max 10 minutes, empty teacherPages, internal mathematical QA, "
                             +"six writing lines per task, correct homework day language, and preserve native graph tasks. ")
                             + "Generate a NEW, shorter, valid complete lessonJson string. "
                         + "Correct JSON brackets, escaped backslashes, nested quotes, meta/workbookPages/teacherPages and math QA. "
                         + "Each exercise row.math and extra.math MUST be {latex:nonempty TeX} or {tokens:[one or more short strings]}. "
                         + "Never use empty tokens. qa.algebra must verify a real exercise answer. "
-                        + "Never output partial JSON. Retain the student's German exercises and separate teacher solutions."));
+                        + "Never output partial JSON. Retain the student's German exercises; for homework teacherPages must be empty, for lessons keep separate teacher solutions."));
             Map<String,Object> payload = Map.of("model", model, "store", false, "max_output_tokens", 24000,
                     "instructions", instructions,
                     "input", homework==null ? json.writeValueAsString(input)
@@ -230,7 +231,7 @@ public class WorkbookContentService {
             @SuppressWarnings("unchecked") Map<String,Object> body = json.readValue(response.body(), Map.class);
             if (!"completed".equals(body.get("status"))) throw new IllegalStateException("Workbook content generation did not complete");
             try {
-                Content generated=validateContentText(outputText(body));
+                Content generated=validateContentText(outputText(body),homework!=null);
                 if(homework==null)return generated;
                 // Repair only unambiguous task-number metadata; do not invent
                 // mathematics or bypass the canonical homework validator.
@@ -272,7 +273,7 @@ public class WorkbookContentService {
                   {"meta":{"school":"MINDCRAFTI SCHOOL","subject":"MATHEMATIK","durationMinutes":30,"homeworkEstimatedMinutes":5},
                    "workbookPages":[{"title":"Terme","subtitle":"Vereinfache.","blocks":[%s
                      {"type":"exercise","number":1,"title":"Fasse zusammen.","rows":[{"label":"","math":{"latex":"2x+3x"},"work":true}],"writeLines":6}]}],
-                   "teacherPages":[{"title":"Lösungen","subtitle":"","blocks":[{"type":"solutions","section":"1","title":"Lösung","items":[{"label":"1","math":{"latex":"2x+3x=5x"}}]}]}],
+                   "teacherPages":[],
                    "qa":{"algebra":[{"number":1,"kind":"equivalence","expression":"2*x+3*x","answer":"5*x","restrictions":[]}]}}
                   """.formatted(scaffold);
     }
@@ -348,10 +349,29 @@ public class WorkbookContentService {
 
     /** Parses and validates the inner JSON before any PDF is rendered or attached. */
     Content validateContentText(String output) throws Exception {
+        return validateContentText(output,false);
+    }
+
+    Content validateContentText(String output, boolean studentOnlyHomework) throws Exception {
         Content content = json.readValue(output, Content.class);
         if (content == null || content.lessonJson() == null || content.lessonJson().length() > OwnerWorkbookPdfRenderService.MAX_INPUT_CHARS)
             throw new IllegalArgumentException("Generated workbook content is missing or too large");
         @SuppressWarnings("unchecked") Map<String,Object> document = json.readValue(content.lessonJson(), Map.class);
+        if(studentOnlyHomework){
+            if(document==null || !(document.get("meta") instanceof Map<?,?> rawMeta))
+                throw new IllegalArgumentException("Homework lessonJson requires meta");
+            Map<String,Object> meta=new java.util.LinkedHashMap<>();
+            rawMeta.forEach((key,value)->meta.put(String.valueOf(key),value));
+            meta.put("homeworkMode",true);
+            meta.put("homeworkStudentOnly",true);
+            document.put("meta",meta);
+            // Discard any teacher text even if the model ignores the instruction.
+            document.put("teacherPages",List.of());
+            content=new Content(json.writeValueAsString(document),content.lessonPlan(),content.difficulties());
+        }else if(document!=null && document.get("meta") instanceof Map<?,?> meta
+                && Boolean.TRUE.equals(meta.get("homeworkStudentOnly"))){
+            throw new IllegalArgumentException("Student-only homework belongs to the dedicated homework workflow");
+        }
         OwnerWorkbookPdfRenderService.validateDocument(document);
         validateMathExpressions(document);
         if (!(document.get("qa") instanceof Map<?,?> qa) || !(qa.get("algebra") instanceof List<?> checks) || checks.isEmpty())

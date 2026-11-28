@@ -147,8 +147,14 @@ def main():
         found = [out / f'{basename}_Arbeitsheft_{duration}min.pdf', out / f'{basename}_Lehrerloesungen_{duration}min.pdf']
     else:
         found = sorted(out.glob(f'*_Arbeitsheft_{duration}min.pdf')) + sorted(out.glob(f'*_Lehrerloesungen_{duration}min.pdf'))
-    if len(found) != 2 or not all(path.is_file() for path in found):
-        raise SystemExit(f'Expected exactly two PDF files in {out}')
+    student_only = data['meta'].get('homeworkMode') is True and data['meta'].get('homeworkStudentOnly') is True
+    if student_only:
+        found = [path for path in found if '_Arbeitsheft_' in path.name]
+        if list(out.glob(f'*_Lehrerloesungen_{duration}min.pdf')):
+            raise SystemExit('Student-only homework must not generate teacher answer PDFs')
+    expected = 1 if student_only else 2
+    if len(found) != expected or not all(path.is_file() for path in found):
+        raise SystemExit(f'Expected exactly {expected} PDF files in {out}')
     results = []
     for path in found:
         count = len(data['workbookPages'] if '_Arbeitsheft_' in path.name else data['teacherPages'])
