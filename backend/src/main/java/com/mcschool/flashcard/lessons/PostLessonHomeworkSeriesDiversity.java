@@ -40,6 +40,8 @@ final class PostLessonHomeworkSeriesDiversity {
                     String key = key(task.get("expression"));
                     if (key.isBlank()) { allSimple=false; continue; }
                     used.add(key);
+                    String fingerprint=PostLessonHomeworkMath.fingerprint(key);
+                    if(!fingerprint.isBlank())used.add("math:"+fingerprint);
                     allSimple &= isSimpleLinearZero(key);
                 }
                 if (priorDay > 0) previousAllSimple.put(priorDay, allSimple);
@@ -52,6 +54,9 @@ final class PostLessonHomeworkSeriesDiversity {
             String key = taskKey(task);
             if (key.isEmpty()) continue; // Existing field validation will reject it.
             if (!used.add(key)) throw new IllegalArgumentException(REPEATED_EXPRESSION);
+            String fingerprint=PostLessonHomeworkMath.fingerprint(key);
+            if(!fingerprint.isBlank()&&!used.add("math:"+fingerprint))
+                throw new IllegalArgumentException(REPEATED_EXPRESSION);
             currentAllSimple &= isSimpleLinearZero(key);
         }
         // Avoid three consecutive days of exclusively "ax+b=0" substitution.
