@@ -131,6 +131,51 @@ describe('parent curriculum changes per lesson', () => {
     expect(screen.getByText('Изменившиеся навыки')).toBeInTheDocument();
   });
 
+  it('refreshes one current snapshot for the open tree and the graph', async () => {
+    const original = dashboard([]);
+    original.lessonProgress[0].confirmedPercent = 14.9;
+    const updated: ParentSkillsDashboard = {
+      ...original,
+      confirmedPercent: 16.5,
+      skills: original.skills.map(skill =>
+        skill.id === 'g5-1-7' ? { ...skill, mastery: 55 } : skill),
+    };
+    vi.mocked(parentApi.skills)
+      .mockResolvedValueOnce(original)
+      .mockResolvedValueOnce(original)
+      .mockResolvedValue(updated);
+    vi.mocked(parentApi.skillsTree).mockResolvedValue({
+      boardId:'grade-5',boardRevision:3,boardUpdatedAt:'2026-11-20T20:00:00Z',
+      board:{schemaVersion:1,title:'Математика 5 класс',grade:5,source:'Lehrplan',
+        nodes:[{id:'g5-1-7',kind:'skill',title:'Степени и степени десяти',
+          de:'Potenzen',description:'',example:'',source:'',color:'orange',
+          x:0,y:0,archived:false,core:true,schoolTypes:[]}],edges:[]},
+    });
+    render(<ParentSkillsPage />);
+    expect(await screen.findByText(/Текущая карта: 15.1%/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab',{name:'Дерево навыков'}));
+    const iframe = await screen.findByTitle('Дерево навыков ребёнка') as HTMLIFrameElement;
+    const post = vi.spyOn(iframe.contentWindow!, 'postMessage');
+    fireEvent.load(iframe);
+    await waitFor(() => expect(post).toHaveBeenCalledWith(
+      expect.objectContaining({type:'mindcrafti-skills-parent-config',
+        progress:expect.objectContaining({mastery:{'g5-1-7':45,'g5-1-1':60}})}),
+      window.location.origin));
+    fireEvent.focus(window);
+    await waitFor(() => expect(post).toHaveBeenCalledWith(
+      expect.objectContaining({type:'mindcrafti-skills-parent-config',
+        progress:expect.objectContaining({
+          overallPercent:16.5,
+          mastery:{'g5-1-7':55,'g5-1-1':60},
+        })}),
+      window.location.origin));
+    fireEvent.click(screen.getByRole('tab',{name:'График роста'}));
+    expect(await screen.findByText(/Текущая карта: 16.5%/)).toBeInTheDocument();
+    // A later review is a distinct current snapshot, never a fabricated lesson point.
+    expect(screen.getByRole('img',{name:/Текущая карта: 16.5%/})).toBeInTheDocument();
+    expect(screen.getByRole('button',{name:/Индивидуальный урок/})).toHaveAttribute('aria-pressed','true');
+  });
+
   it('opens the chronologically newest lesson even if the API list is unordered', async () => {
     const data=dashboard([]);
     const older='33333333-3333-4333-8333-333333333333';

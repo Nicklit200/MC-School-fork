@@ -17,6 +17,16 @@ function ProgressGraph({ data, language, selectedId, onSelect }: {
   selectedId: string | null; onSelect: (lessonId: string) => void;
 }) {
   const lessons = data.lessonProgress ?? [];
+  const latestLesson = lessons.reduce<(typeof lessons)[number] | null>(
+    (last, lesson) => !last || Date.parse(lesson.endedAt) > Date.parse(last.endedAt)
+      ? lesson : last, null);
+  // A late workbook/homework review can update the canonical map AFTER the last
+  // lesson. Show that snapshot separately instead of falsifying a lesson point.
+  const currentScore = data.confirmedPercent;
+  const latestLessonScore = latestLesson?.confirmedPercent ?? null;
+  const hasCurrentSnapshot = currentScore != null && Number.isFinite(currentScore);
+  const needsCurrentMarker = hasCurrentSnapshot &&
+    (latestLessonScore == null || Math.abs(currentScore - latestLessonScore) >= 0.05);
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     // The newest lesson is automatically selected when the page opens.
@@ -29,18 +39,22 @@ function ProgressGraph({ data, language, selectedId, onSelect }: {
     }
   }, [lessons, selectedId]);
   if (!lessons.length) return <div className="parent-progress__chart-empty">
+    {hasCurrentSnapshot && <strong className="parent-progress__current-score">
+      {say(language, 'Текущая карта:', 'Aktueller Kompetenzstand:')} {percent(currentScore)}
+    </strong>}
     {say(language, 'Завершённые уроки появятся на графике после проведения занятий.',
       'Abgeschlossene Unterrichtsstunden erscheinen nach dem Unterricht.')}
   </div>;
-  const width = Math.max(760, (lessons.length - 1) * 100 + 112);
+  const width = Math.max(760, (lessons.length - 1 + (needsCurrentMarker ? 1 : 0)) * 100 + 112);
   const left = 54;
   const right = width - 43;
   // Focus the vertical axis around the actual score range so small, real changes
   // remain visible. The displayed axis bounds make the zoom explicit; the
   // underlying percentages and stored mastery values are never transformed.
-  const assessedValues = lessons
-    .map(lesson => lesson.confirmedPercent)
-    .filter((value): value is number => value != null && Number.isFinite(value))
+  const assessedValues = [
+    ...lessons.map(lesson => lesson.confirmedPercent),
+    ...(hasCurrentSnapshot ? [currentScore] : []),
+  ].filter((value): value is number => value != null && Number.isFinite(value))
     .map(value => Math.max(0, Math.min(100, value)));
   const minScore = assessedValues.length ? Math.min(...assessedValues) : 0;
   const maxScore = assessedValues.length ? Math.max(...assessedValues) : 100;
@@ -63,10 +77,15 @@ function ProgressGraph({ data, language, selectedId, onSelect }: {
   const scaleLabel = useFullScale
     ? say(language, 'Полная шкала: 0–100%', 'Vollständige Skala: 0–100%')
     : `${say(language, 'Увеличенный масштаб', 'Vergrößerter Maßstab')}: ${axisFormatter.format(scaleMin)}–${axisFormatter.format(scaleMax)}%`;
+  const chartStops = Math.max(1, lessons.length - 1 + (needsCurrentMarker ? 1 : 0));
   const items = lessons.map((lesson, i) => ({
-    ...lesson, x: lessons.length === 1 ? (left + right) / 2 : left + i * (right-left)/(lessons.length-1),
+    ...lesson, x: lessons.length === 1 && !needsCurrentMarker
+      ? (left + right) / 2 : left + i * (right-left)/chartStops,
     y: lesson.confirmedPercent == null ? plotBottom : y(lesson.confirmedPercent),
   }));
+  const latestItem = latestLesson && items.find(item => item.lessonId === latestLesson.lessonId);
+  const currentX = right;
+  const currentY = hasCurrentSnapshot ? y(currentScore) : plotBottom;
   // Do not draw an invented zero baseline for lessons with no assessed work.
   let path = '';
   let drawing = false;
@@ -78,7 +97,12 @@ function ProgressGraph({ data, language, selectedId, onSelect }: {
   const select = (id: string) => onSelect(id);
   return <div ref={scrollRef} className="parent-progress__graph" role="region"
     aria-label={say(language, 'Выберите точку урока на графике', 'Unterrichtspunkt im Diagramm wählen')}>
-    <div className="parent-progress__scale-note" aria-live="polite">{scaleLabel}</div>
+    <div className="parent-progress__graph-meta">
+      <span className="parent-progress__scale-note" aria-live="polite">{scaleLabel}</span>
+      {hasCurrentSnapshot && <strong className="parent-progress__current-score">
+        {say(language, 'Текущая карта:', 'Aktueller Kompetenzstand:')} {percent(currentScore)}
+      </strong>}
+    </div>
     <svg viewBox={`0 0 ${width} 310`} style={{ width, minWidth: '100%', maxWidth: 'none' }}
       aria-label={say(language, 'История прогресса по урокам', 'Lernfortschritt nach Unterricht')}
       role="img">
@@ -89,6 +113,9 @@ function ProgressGraph({ data, language, selectedId, onSelect }: {
         </text>
       </g>)}
       {path && <path d={path} className="parent-progress__line"/>}
+      {needsCurrentMarker && latestItem?.confirmedPercent != null && <line
+        x1={latestItem.x} y1={latestItem.y} x2={currentX} y2={currentY}
+        className="parent-progress__snapshot-connection"/>}
       {items.map((point) => {
         const chosen = selectedId === point.lessonId;
         const improvementCount = data.lessons.find(l=>l.id===point.lessonId)?.improvements?.length ?? 0;
@@ -122,10 +149,22 @@ function ProgressGraph({ data, language, selectedId, onSelect }: {
               {day:'2-digit',month:'2-digit',timeZone:'Europe/Berlin'}).format(new Date(point.endedAt))}
           </text>
           <title>{description}{improvementCount > 0
-            ? `, ${say(language, 'есть подтверждённый прогресс по транскрипции',
-                  'belegter Fortschritt aus dem Transkript')}` : ''}</title>
+            ? `, ${say(language, 'есть прогресс по навыкам',
+                  'Fortschritt bei den Kompetenzen')}` : ''}</title>
         </g>;
       })}
+      {needsCurrentMarker && <g className="parent-progress__current-point"
+        role="img" aria-label={`${say(language, 'Текущая карта', 'Aktueller Stand')}: ${percent(currentScore)}`}>
+        <circle cx={currentX} cy={currentY} r="12" className="parent-progress__current-halo"/>
+        <circle cx={currentX} cy={currentY} r="7" className="parent-progress__current-dot"/>
+        <text x={currentX} y={Math.max(17, currentY - 21)} textAnchor="end"
+          className="parent-progress__point-value parent-progress__point-value--active">
+          {percent(currentScore)}
+        </text>
+        <text x={currentX} y="290" textAnchor="end" className="parent-progress__point-date parent-progress__point-date--active">
+          {say(language, 'Сейчас', 'Aktuell')}
+        </text>
+      </g>}
     </svg>
   </div>;
 }
@@ -283,10 +322,13 @@ export function ParentSkillsPage() {
   const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'graph' | 'tree'>('graph');
   const [focusedSkillId, setFocusedSkillId] = useState<string | null>(null);
+  // The chart and the tree are refreshed from one authenticated dashboard response.
+  const refreshCurrent = useRef<() => void>(() => {});
 
   const openSkillInTree = (skillId: string) => {
     setFocusedSkillId(skillId);
     setViewMode('tree');
+    refreshCurrent.current();
   };
   const selectTreeSkill = (skillId: string) => {
     setFocusedSkillId(skillId);
@@ -308,18 +350,45 @@ export function ParentSkillsPage() {
   useEffect(() => {
     if (!selected) return;
     let live = true;
+    let inFlight = false;
+    let initial = true;
     setLoading(true);setError('');setData(null);setSelectedLessonId(null);setFocusedSkillId(null);
-    parentApi.skills(selected).then(result => {
-      if (!live) return;
-      // Selecting the most recent completed class also works when switching children.
-      const mostRecent = [...(result.lessonProgress ?? [])]
-        .sort((a, b) => Date.parse(b.endedAt) - Date.parse(a.endedAt))[0];
-      setSelectedLessonId(mostRecent?.lessonId ?? null);
-      setData(result);
-    })
-      .catch(e => { if(live) setError(String(e?.message ?? e)); })
-      .finally(() => { if(live) setLoading(false); });
-    return () => { live = false; };
+    const refresh = () => {
+      if (!live || inFlight) return;
+      inFlight = true;
+      parentApi.skills(selected).then(result => {
+        if (!live) return;
+        // A single new snapshot updates the graph totals AND tree mastery values.
+        setData(result);
+        setError('');
+        const latest = [...(result.lessonProgress ?? [])]
+          .sort((a,b) => Date.parse(b.endedAt) - Date.parse(a.endedAt))[0];
+        setSelectedLessonId(previous => previous &&
+          result.lessonProgress.some(lesson => lesson.lessonId === previous)
+          ? previous : latest?.lessonId ?? null);
+      }).catch(e => {
+        // Do not discard earlier displayed skill values on a transient network error.
+        if (live && initial) setError(String(e?.message ?? e));
+      }).finally(() => {
+        inFlight = false;
+        if (live && initial) { initial = false; setLoading(false); }
+      });
+    };
+    refresh();
+    refreshCurrent.current = refresh;
+    const onReturn = () => {
+      if (document.visibilityState !== 'hidden') refresh();
+    };
+    const interval = window.setInterval(onReturn, 30_000);
+    window.addEventListener('focus', onReturn);
+    document.addEventListener('visibilitychange', onReturn);
+    return () => {
+      live = false;
+      refreshCurrent.current = () => {};
+      window.clearInterval(interval);
+      window.removeEventListener('focus', onReturn);
+      document.removeEventListener('visibilitychange', onReturn);
+    };
   }, [selected]);
 
   return <div className="stack parent-dashboard parent-progress">
@@ -344,19 +413,19 @@ export function ParentSkillsPage() {
           aria-label={say(language, 'Вид карты навыков', 'Kompetenzansicht')}>
           <button type="button" role="tab" aria-selected={viewMode === 'graph'}
             className={viewMode === 'graph' ? 'is-active' : ''}
-            onClick={() => setViewMode('graph')}>
+            onClick={() => { setViewMode('graph'); refreshCurrent.current(); }}>
             {say(language, 'График роста', 'Lernkurve')}
           </button>
           <button type="button" role="tab" aria-selected={viewMode === 'tree'}
             className={viewMode === 'tree' ? 'is-active' : ''}
-            onClick={() => setViewMode('tree')}>
+            onClick={() => { setViewMode('tree'); refreshCurrent.current(); }}>
             {say(language, 'Дерево навыков', 'Kompetenzbaum')}
           </button>
         </div>
         {viewMode === 'graph' ? <div role="tabpanel">
         <section className="panel parent-progress__chart-panel">
           <div className="parent-progress__section-title"><h2>{say(language,'Как растут знания','Lernfortschritt im Zeitverlauf')}</h2>
-            <span className="parent-progress__muted">{say(language,'Одна точка = один урок','Ein Punkt = eine Stunde')}</span></div>
+            <span className="parent-progress__muted">{say(language,'Точки уроков + актуальная карта отдельно','Unterrichtspunkte + aktueller Stand separat')}</span></div>
           <ProgressGraph data={data} language={language} selectedId={selectedLessonId}
             onSelect={id => setSelectedLessonId(current => current === id ? null : id)} />
 

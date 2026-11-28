@@ -516,10 +516,39 @@ function loadParentTree(incoming) {
       element("p","",error.message||"Обновите карту навыков."));
   }
 }
+/** Update the already visible parent tree when its canonical mastery snapshot changes.
+ * The iframe is deliberately read-only and never independently fetches mastery. */
+function refreshParentTree(incoming) {
+  if(!config?.parentEmbedded)return;
+  const next=incoming?.progress;
+  if(!next||next.boardId!==boardId||!next.mastery||typeof next.mastery!=="object"
+    ||!Array.isArray(next.allowedSkillIds)||!next.board||!Array.isArray(next.board.nodes))return;
+  try{
+    if(next.boardRevision!==snapshot?.revision){
+      validateBoard(next.board);
+      snapshot={id:next.boardId,revision:next.boardRevision,
+        updatedAt:next.boardUpdatedAt,data:next.board};
+      data=clone(next.board);
+    }
+    const allowed=new Set(next.allowedSkillIds);
+    parentAllowedSkills=allowed;
+    masteryByStudent.parent=Object.fromEntries(
+      Object.entries(next.mastery).filter(([id,value])=>
+        allowed.has(id)&&typeof value==="number"&&Number.isFinite(value)));
+    masteryHistoryByStudent.parent=Array.isArray(next.history)
+      ?next.history.map((entry,index)=>({...entry,id:index+1,studentId:"parent",
+        studentName:students[0]?.fullName||"Ученик",updatedBy:"parent"})):[];
+    publicOverallPercent=Number.isFinite(next.overallPercent)?next.overallPercent:null;
+    render();
+    if(selection?.type==="node"&&node(selection.id))showNode(selection.id);
+  }catch(error){notice(error.message||"Не удалось обновить дерево навыков.",true);}
+}
 window.addEventListener("message",event=>{
   if(event.origin!==location.origin||event.source!==window.parent||window.parent===window)return;
-  if(event.data?.type==="mindcrafti-skills-parent-config"&&!config)
-    loadParentTree(event.data);
+  if(event.data?.type==="mindcrafti-skills-parent-config"){
+    if(!config)loadParentTree(event.data);
+    else if(config?.parentEmbedded)refreshParentTree(event.data);
+  }
   else if(event.data?.type==="mindcrafti-skills-parent-focus-node"&&config?.parentEmbedded) {
     const skillId=event.data.skillId;
     if(typeof skillId!=="string"||node(skillId)?.kind!=="skill"||node(skillId)?.archived)return;
