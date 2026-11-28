@@ -437,7 +437,7 @@ public class PostLessonHomeworkContentService {
                 +"worked tasks and their difficulty, not early problems skipped as too easy. "
                 +"Respect the same mathematical and vector drawing capabilities as our "
                 +"lesson workbooks. Keep one A4 page, up to two tasks, <=10 minutes, "
-                +"private answers and verified math.";
+                +"no teacher solution document, internal QA only and verified math.";
         if(requireGraph)
             instruction+=" A real programmatically rendered graph from the SAME school "
                     +"workbook engine is MANDATORY today; numerical substitution without "
@@ -454,7 +454,7 @@ public class PostLessonHomeworkContentService {
                         +"or a single native visualTask, and six full-width handwriting lines. "
                         +"Use the simplest supported representation, no split layouts, decorative "
                         +"diagrams, optional complex blocks, or additional exercises. "
-                        +"Keep required native graphs or geometry, language, private answers, "
+                        +"Keep required native graphs or geometry, language, empty teacherPages, "
                         +"exact mathematical QA, and one-page A4 validation. "
                         +"Use different values from earlier days; do not copy their exercises.";
                 LOG.info("Homework entering simplified recovery: day={} attempt={} max={}",day,attempt,maxAttempts);
@@ -508,8 +508,8 @@ public class PostLessonHomeworkContentService {
             progress.accept(PostLessonHomeworkStage.PDF_RENDER);
             try{
                 OwnerWorkbookPdfRenderService.StudioRender pdf=renderer.renderStudio(authored.lessonJson());
-                if(pdf.studentPages()!=1 || pdf.teacherPages()<1
-                        ||pdf.studentPdf().length<100 || pdf.teacherPdf().length<100)
+                if(pdf.studentPages()!=1 || pdf.teacherPages()!=0
+                        ||pdf.studentPdf().length<100 || pdf.teacherPdf().length!=0)
                     throw new IllegalArgumentException("HOMEWORK_PDF_INVALID");
                 if(simplified)LOG.info("Homework simplified recovery succeeded: day={} attempt={}",day,attempt);
                 return new GeneratedHomework(pdf,checked.review());
