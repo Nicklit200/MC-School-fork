@@ -4,8 +4,6 @@ import { onlineClassesApi, type PostLessonHomeworkReview } from '../../api/onlin
 import './post-lesson-homework-review.css';
 import { PostLessonHomeworkPdfCanvas } from './PostLessonHomeworkPdfCanvas';
 
-type Kind = 'student' | 'teacher';
-
 export function PostLessonHomeworkReviewPage() {
   const { classId = '' } = useParams();
   const [report, setReport] = useState<PostLessonHomeworkReview | null>(null);
@@ -13,7 +11,6 @@ export function PostLessonHomeworkReviewPage() {
   const [loading, setLoading] = useState(true);
   const [studentId, setStudentId] = useState('');
   const [day, setDay] = useState(1);
-  const [kind, setKind] = useState<Kind>('student');
   const [pdfUrl, setPdfUrl] = useState('');
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
   const [pdfKey, setPdfKey] = useState('');
@@ -48,7 +45,7 @@ export function PostLessonHomeworkReviewPage() {
   const documents = useMemo(() => (report?.documents ?? []).filter(item => item.studentId === studentId)
     .sort((a, b) => a.day - b.day), [report, studentId]);
   const current = documents.find(item => item.day === day) ?? null;
-  const cacheKey = [classId, studentId, day, kind].join(':');
+  const cacheKey = [classId, studentId, day, 'student'].join(':');
 
   useEffect(() => {
     if (!current) { setPdfUrl(''); setPdfBlob(null); setPdfKey(''); return; }
@@ -60,7 +57,7 @@ export function PostLessonHomeworkReviewPage() {
     setPdfError('');
     if (saved) { setPdfLoading(false); return; }
     setPdfLoading(true);
-    void onlineClassesApi.postLessonHomeworkReviewPdf(classId, studentId, day, kind)
+    void onlineClassesApi.postLessonHomeworkReviewPdf(classId, studentId, day, 'student')
       .then(blob => {
         if (!active) return;
         const url = URL.createObjectURL(blob);
@@ -72,13 +69,12 @@ export function PostLessonHomeworkReviewPage() {
       .catch(() => { if (active) setPdfError('Не удалось открыть PDF. Повторите попытку.'); })
       .finally(() => { if (active) setPdfLoading(false); });
     return () => { active = false; };
-  }, [classId, studentId, day, kind, cacheKey, current]);
+  }, [classId, studentId, day, cacheKey, current]);
 
   function changeStudent(next: string) {
     setStudentId(next);
     const first = report?.documents.find(doc => doc.studentId === next);
     setDay(first?.day ?? 1);
-    setKind('student');
   }
 
   const visiblePdfUrl = pdfKey === cacheKey ? pdfUrl : '';
@@ -138,13 +134,10 @@ export function PostLessonHomeworkReviewPage() {
           </aside>
           <section className="post-review-document">
             <div className="post-review-document-bar">
-              <div role="group" aria-label="Тип PDF">
-                <button type="button" aria-pressed={kind === 'student'} onClick={() => setKind('student')}>Задания</button>
-                <button type="button" aria-pressed={kind === 'teacher'} onClick={() => setKind('teacher')}>Ответы для учителя</button>
-              </div>
+              <strong>Задания</strong>
               {visiblePdfUrl && <div className="post-review-pdf-file-actions">
                 <a className="btn btn--secondary" href={visiblePdfUrl} target="_blank" rel="noopener noreferrer">Открыть отдельно</a>
-                <a className="btn btn--secondary" download={'Mindcrafti_' + kind + '_' + current.date + '.pdf'} href={visiblePdfUrl}>Скачать PDF</a>
+                <a className="btn btn--secondary" download={'Mindcrafti_Hausaufgaben_' + current.date + '.pdf'} href={visiblePdfUrl}>Скачать PDF</a>
               </div>}
             </div>
             {pdfLoading && !visiblePdfBlob ? <div className="post-review-message" role="status">Загружаем PDF…</div>
