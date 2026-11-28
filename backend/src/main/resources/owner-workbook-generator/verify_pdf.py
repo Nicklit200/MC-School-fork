@@ -73,7 +73,9 @@ def verify_homework_text_contrast(page, body_top, footer_top, drawings):
     """
     fills = [d for d in drawings if d.get('fill') is not None and
              _rgb(d['fill']) is not None and d.get('fill_opacity', 1) >= .99 and
-             any(item[0] == 're' for item in d.get('items', []))]
+             # Compound paths can be hollow borders (outer and inner rectangles).
+             # Their bounding boxes are not filled backgrounds.
+             len(d.get('items', [])) == 1 and d['items'][0][0] == 're']
     for span in page.get_texttrace():
         bbox = fitz.Rect(span['bbox'])
         if bbox.y0 < body_top - 2 or bbox.y0 >= footer_top - 1:

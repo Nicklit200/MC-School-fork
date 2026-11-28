@@ -138,6 +138,21 @@ class PdfRejectionTests(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, 'Homework text contrast'):
             verify_file(self.path, 1, homework=True)
 
+    def test_homework_contrast_does_not_treat_hollow_border_as_background(self):
+        self.fixture()
+        with fitz.open(self.path) as pdf:
+            page = pdf[0]
+            shape = page.new_shape()
+            shape.draw_rect(fitz.Rect(40, 245, 400, 300))
+            shape.draw_rect(fitz.Rect(42, 247, 398, 298))
+            shape.finish(color=None, fill=(1, .416, 0), even_odd=True)
+            shape.commit()
+            page.insert_text((50, 270), 'Readable orange label', color=(.616, .231, 0))
+            pdf.save(self.path, incremental=True, encryption=fitz.PDF_ENCRYPT_KEEP)
+        self.report['pdfSha256'] = hashlib.sha256(self.path.read_bytes()).hexdigest()
+        self.write_report()
+        self.assertTrue(verify_file(self.path, 1, homework=True)['layoutPassed'])
+
     def test_footer_detection_does_not_depend_on_font_whitespace(self):
         self.fixture()
         with fitz.open(self.path) as pdf:
