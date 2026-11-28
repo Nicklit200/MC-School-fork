@@ -58,8 +58,7 @@ public class PostLessonHomeworkContentService {
         this.client=Objects.requireNonNull(client);
         this.workbookGenerator=workbookGenerator;
     }
-    public boolean configured(){return workbookGenerator!=null
-            ?workbookGenerator.isConfigured():!apiKey.isEmpty()&&!model.isEmpty();}
+    public boolean configured(){return !apiKey.isEmpty()&&!model.isEmpty();}
 
     private String ask(String instructions,Object evidence,String formatName,Map<String,Object> schema)throws Exception{
         if(apiKey.isBlank()||model.isBlank())throw new IllegalStateException("HOMEWORK_AI_NOT_CONFIGURED");
