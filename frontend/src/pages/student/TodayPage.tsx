@@ -35,6 +35,7 @@ export function TodayPage() {
       )
       .sort(
         (a, b) =>
+          Number(b.startDate === todayDate) - Number(a.startDate === todayDate) ||
           a.startDate.localeCompare(b.startDate) ||
           (a.createdAt ?? '').localeCompare(b.createdAt ?? ''),
       );

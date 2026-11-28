@@ -6,6 +6,7 @@ import { api, ApiRequestError } from '../../api/client';
 import type { Homework, Today } from '../../api/types';
 import { I18nProvider } from '../../i18n/I18nContext';
 import { TodayPage } from './TodayPage';
+import { StudentHomeworksListPage } from './StudentHomeworksListPage';
 
 vi.mock('../../api/client', async importOriginal => {
   const actual = await importOriginal<typeof import('../../api/client')>();
@@ -46,6 +47,24 @@ describe('student today tasks', () => {
     expect(screen.getByRole('link', { name: /overdue\.pdf/ })).toHaveAttribute('href', '/student/homeworks/overdue/worksheet');
     for (const name of ['submitted.pdf', 'future.pdf', 'cards.pdf']) expect(screen.queryByText(name)).not.toBeInTheDocument();
   });
+
+  it.each([['today', TodayPage], ['homeworks', StudentHomeworksListPage]] as const)(
+    'prioritizes today in %s without changing the order of older work', async (_view, Page) => {
+      vi.mocked(api.study.homeworks).mockResolvedValue([
+        homework('yesterday', { startDate: '2026-10-23', overdue: true }),
+        homework('oldest', { startDate: '2026-10-21', overdue: true }),
+        homework('today', { overdue: true }),
+        homework('future', { startDate: '2026-10-25' }),
+      ]);
+      render(<I18nProvider><MemoryRouter><Page /></MemoryRouter></I18nProvider>);
+      await screen.findByRole('link', { name: /today\.pdf/ });
+      expect(screen.getAllByRole('link')
+        .filter(link => link.getAttribute('href')?.endsWith('/worksheet'))
+        .map(link => link.getAttribute('href')))
+        .toEqual(['/student/homeworks/today/worksheet',
+          '/student/homeworks/oldest/worksheet', '/student/homeworks/yesterday/worksheet']);
+    },
+  );
 
   it('starts a scheduled session with one available card when the server permits it', async () => {
     vi.mocked(api.study.today).mockResolvedValue({ ...today, totalCards: 1, dueCardCount: 1, learnedCount: 0, minCardsToStart: 1 });

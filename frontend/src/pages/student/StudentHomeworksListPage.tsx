@@ -22,7 +22,9 @@ export function StudentHomeworksListPage() {
   const homeworks = useMemo(
     () => (items ?? [])
       .filter((item) => item.hasWorksheet && (item.startDate === today || item.overdue))
-      .sort((a, b) => a.startDate.localeCompare(b.startDate) || (a.createdAt ?? '').localeCompare(b.createdAt ?? '')),
+      .sort((a, b) => Number(b.startDate === today) - Number(a.startDate === today)
+        || a.startDate.localeCompare(b.startDate)
+        || (a.createdAt ?? '').localeCompare(b.createdAt ?? '')),
     [items, today],
   );
 
