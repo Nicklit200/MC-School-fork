@@ -41,6 +41,22 @@ final class PostLessonHomeworkMath {
         throw new IllegalArgumentException("HOMEWORK_CONTENT_QA_KIND");
     }
 
+    /** Canonical display identity, not algebraic simplification: two different
+     * problems with the same answer must remain different exercises. */
+    static String fingerprint(String source){
+        if(source==null||source.isBlank()||source.length()>200)return "";
+        try{
+            String[] sides=source.split("=",-1);
+            if(sides.length==1)return parse(sides[0]).latex().replaceAll("\\s+","");
+            if(sides.length==2){
+                String left=parse(sides[0]).latex().replaceAll("\\s+","");
+                String right=parse(sides[1]).latex().replaceAll("\\s+","");
+                return left.compareTo(right)<=0?left+"="+right:right+"="+left;
+            }
+        }catch(IllegalArgumentException ignored){}
+        return "";
+    }
+
     private static Node parse(String source) {
         Parser parser = new Parser(source);
         Node result = parser.expression(0);
