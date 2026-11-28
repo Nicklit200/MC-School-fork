@@ -329,7 +329,12 @@ public class OwnerWorkbookPdfRenderService {
             return "WORKBOOK_RENDER_LAYOUT_QA";
         if (log.contains("Fraction strip needs 0 <= numerator <= denominator"))
             return "WORKBOOK_RENDER_FRACTION_STRIP";
-        if (log.contains("matching needs 1 to 12 items") || log.contains("Invalid matching index")
+        if (log.contains("Invalid graph range") || log.contains("Invalid function parameters")
+                || log.contains("Invalid visual") || log.contains("Unknown visual property")
+                || log.contains("isolated visible solutions") || log.contains("not visible")
+                || log.contains("Invalid geometry") || log.contains("Unsupported polygon objective")
+                || log.contains("Invalid fraction circle")
+                || log.contains("matching needs 1 to 12 items") || log.contains("Invalid matching index")
                 || log.contains("intersectionResult requires a structured graph"))
             return "WORKBOOK_RENDER_VISUAL_SPEC";
         if (log.contains("split.columns must") || log.contains("Invalid bounded layout length")
