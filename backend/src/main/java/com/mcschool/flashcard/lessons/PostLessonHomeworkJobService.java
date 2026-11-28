@@ -62,12 +62,15 @@ public class PostLessonHomeworkJobService {
     private final PostLessonHomeworkPilotAccess pilot;
     @org.springframework.beans.factory.annotation.Autowired
     private LessonParticipantsService lessonParticipants;
-    private final ExecutorService worker=Executors.newSingleThreadExecutor(r->{
+    // Limit parallel jobs to three so the four-slot renderer retains capacity
+    // for interactive requests. Days in each job remain sequential for diversity.
+    private static final int MAX_PARALLEL_JOBS=3;
+    private final ExecutorService worker=Executors.newFixedThreadPool(MAX_PARALLEL_JOBS,r->{
         Thread t=new Thread(r,"mindcrafti-post-lesson-homework");t.setDaemon(true);return t;
     });
-    private final AtomicBoolean busy=new AtomicBoolean(false);
+    private final AtomicBoolean ticking=new AtomicBoolean(false);
     private final UUID workerId=UUID.randomUUID();
-    private volatile UUID activeJob;
+    private final Set<UUID> activeJobs=ConcurrentHashMap.newKeySet();
 
     public PostLessonHomeworkJobService(JdbcTemplate db,PlatformTransactionManager manager,ObjectMapper json,
             OnlineClassAccessService access,StudentGroupMemberRepository members,UserRepository users,
@@ -192,33 +195,48 @@ public class PostLessonHomeworkJobService {
 
     @Scheduled(fixedDelay=2500,initialDelay=5000)
     public void tick(){
-        if(worker.isShutdown())return;
-        UUID active=activeJob;
-        if(active!=null){
-            db.update("UPDATE post_lesson_homework_jobs SET lease_until=now()+INTERVAL '90 seconds' WHERE id=? AND state='RUNNING' AND worker_id=?",active,workerId);
-        }
-        if(!busy.compareAndSet(false,true))return;
+        if(worker.isShutdown()||!ticking.compareAndSet(false,true))return;
         try{
-            Job job=tx.execute(st->{
-                db.update("UPDATE post_lesson_homework_jobs SET state='FAILED',failure_code='INTERRUPTED',finished_at=now(),updated_at=now() WHERE state='RUNNING' AND lease_until<now()");
-                // The exact-UUID pilot stays isolated; ALL safely selects queued jobs school-wide.
-                List<Job> list=pilot.allTeachersEnabled()
-                        ? db.query("SELECT * FROM post_lesson_homework_jobs WHERE state='QUEUED' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1",this::row)
-                        : db.query("SELECT * FROM post_lesson_homework_jobs WHERE state='QUEUED' AND teacher_id=? ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1",this::row,pilot.teacherId());
-                if(list.isEmpty())return null;
-                Job item=list.get(0);
-                db.update("UPDATE post_lesson_homework_jobs SET state='RUNNING',worker_id=?,lease_until=now()+INTERVAL '90 seconds',updated_at=now() WHERE id=?",workerId,item.id());
-                return item;
-            });
-            if(job==null){busy.set(false);return;}
-            activeJob=job.id();
-            worker.execute(()->{
-                try{process(job);}
-                catch(Exception failure){
-                    recordFailure(job.id(),failure);
-                } finally{activeJob=null;busy.set(false);}
-            });
-        }catch(Exception failure){activeJob=null;busy.set(false);LOG.warn("Post-lesson homework queue error type={} origin={}",failure.getClass().getSimpleName(),PostLessonHomeworkFailure.origin(failure));}
+            for(UUID active:activeJobs)
+                db.update("UPDATE post_lesson_homework_jobs SET lease_until=now()+INTERVAL '90 seconds' WHERE id=? AND state='RUNNING' AND worker_id=?",active,workerId);
+            while(!worker.isShutdown()&&activeJobs.size()<MAX_PARALLEL_JOBS){
+                Job job=tx.execute(st->{
+                    // Serialize claims across overlapping deployments; a fresh
+                    // statement after the lock sees all committed earlier claims.
+                    db.queryForList("SELECT pg_advisory_xact_lock(hashtext(?))","post-homework-queue-claim");
+                    db.update("UPDATE post_lesson_homework_jobs SET state='FAILED',failure_code='INTERRUPTED',finished_at=now(),updated_at=now() WHERE state='RUNNING' AND lease_until<now()");
+                    Integer running=db.queryForObject("SELECT count(*) FROM post_lesson_homework_jobs WHERE state='RUNNING'",Integer.class);
+                    if(running!=null&&running>=MAX_PARALLEL_JOBS)return null;
+                    // Never run two jobs for the same teacher simultaneously.
+                    // Different teachers have separate lesson and student contexts.
+                    String query="SELECT q.* FROM post_lesson_homework_jobs q WHERE q.state='QUEUED' "
+                            +"AND NOT EXISTS (SELECT 1 FROM post_lesson_homework_jobs r WHERE r.state='RUNNING' AND r.teacher_id=q.teacher_id) ";
+                    List<Job> list=pilot.allTeachersEnabled()
+                            ? db.query(query+"ORDER BY q.created_at FOR UPDATE OF q SKIP LOCKED LIMIT 1",this::row)
+                            : db.query(query+"AND q.teacher_id=? ORDER BY q.created_at FOR UPDATE OF q SKIP LOCKED LIMIT 1",this::row,pilot.teacherId());
+                    if(list.isEmpty())return null;
+                    Job item=list.get(0);
+                    db.update("UPDATE post_lesson_homework_jobs SET state='RUNNING',worker_id=?,lease_until=now()+INTERVAL '90 seconds',updated_at=now() WHERE id=?",workerId,item.id());
+                    return item;
+                });
+                if(job==null)break;
+                activeJobs.add(job.id());
+                try{
+                    worker.execute(()->{
+                        try{process(job);}
+                        catch(Exception failure){recordFailure(job.id(),failure);}
+                        finally{activeJobs.remove(job.id());}
+                    });
+                    LOG.info("Post-lesson homework worker started job={} active={} max={}",job.id(),activeJobs.size(),MAX_PARALLEL_JOBS);
+                }catch(RejectedExecutionException stopped){
+                    activeJobs.remove(job.id());
+                    recordFailure(job.id(),new IllegalStateException("HOMEWORK_JOB_LEASE_LOST",stopped));
+                    break;
+                }
+            }
+        }catch(Exception failure){
+            LOG.warn("Post-lesson homework queue error type={} origin={}",failure.getClass().getSimpleName(),PostLessonHomeworkFailure.origin(failure));
+        }finally{ticking.set(false);}
     }
 
     private void recordFailure(UUID jobId,Exception failure){
