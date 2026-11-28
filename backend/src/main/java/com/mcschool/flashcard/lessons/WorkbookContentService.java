@@ -186,6 +186,10 @@ public class WorkbookContentService {
             Map<String, Object> input = new java.util.LinkedHashMap<>();
             input.put("context", context);
             input.put("teacherInstruction", instruction == null ? "" : instruction);
+            if(homework!=null && context.get("repairReason") instanceof String repair && !repair.isBlank()){
+                input.put("previousPdfRejection",repair);
+                input.put("homeworkRecoveryMode",context.getOrDefault("homeworkRecoveryMode","NORMAL"));
+            }
             if(homework!=null){
                 input.put("materialType","homework");
                 input.put("homeworkDay",homework.day());
@@ -236,6 +240,11 @@ public class WorkbookContentService {
                 return new Content(checked,generated.lessonPlan(),generated.difficulties());
             } catch (Exception badContent) {
                 lastContentError = badContent;
+                if(homework!=null)
+                    org.slf4j.LoggerFactory.getLogger(WorkbookContentService.class).warn(
+                            "Homework canonical author rejected: day={} attempt={} advice={} origin={}",
+                            homework.day(),attempt,homeworkRepairAdvice(badContent),
+                            PostLessonHomeworkFailure.origin(badContent));
             }
         }
         // Preserve the existing validation contract for callers/tests.
