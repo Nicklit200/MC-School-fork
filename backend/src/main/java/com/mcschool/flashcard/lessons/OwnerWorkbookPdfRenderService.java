@@ -280,7 +280,7 @@ public class OwnerWorkbookPdfRenderService {
             String code=studioFailureCode(readStudioDiagnostic(rendererLog));
             // Diagnostic code is an allowlisted category, never child output or pupil data.
             LOG.warn("Workbook studio process failed: diagnosticCode={}",code);
-            throw new IllegalArgumentException(code,failure);
+            throw new IllegalArgumentException(code);
         }
     }
 
