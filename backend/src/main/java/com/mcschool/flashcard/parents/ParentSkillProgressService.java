@@ -169,8 +169,11 @@ public class ParentSkillProgressService {
         int total = skills.size();
         int currentSum = skills.stream().filter(s -> s.mastery() != null)
                 .mapToInt(s -> s.mastery()).sum();
+        // This exact canonical mastery aggregate powers both the embedded skill
+        // tree and the current progress displayed next to the historical chart.
+        // Keep the same allowed-skill denominator as the lesson timeline.
         Double confirmed = assessed == 0 || total == 0 ? null :
-                Math.round(10.0 * currentSum / total) / 10.0;
+                confirmedPercentExact(scoresToMastery(scores), allowed);
         Integer average = assessed == 0 ? null : (int)Math.round((double)currentSum / assessed);
 
         List<Change> history = jdbc.query("""
@@ -551,6 +554,12 @@ public class ParentSkillProgressService {
         return skills.stream().filter(node -> Boolean.TRUE.equals(node.core())
                 || (schoolType != null && node.schoolTypes() != null
                     && node.schoolTypes().contains(schoolType))).toList();
+    }
+
+    private static Map<String,Integer> scoresToMastery(Map<String, Score> scores) {
+        Map<String,Integer> result = new HashMap<>();
+        scores.forEach((skillId, score) -> result.put(skillId, score.value()));
+        return result;
     }
 
     static double confirmedPercentExact(Map<String,Integer> scores, Set<String> allowed) {
