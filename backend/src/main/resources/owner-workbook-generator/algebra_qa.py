@@ -260,6 +260,41 @@ def validate(assertion):
         validate({'kind': 'equivalence', 'expression': assertion['expression'],
                   'answer': answer, 'restrictions': assertion.get('restrictions', [])})
         return {'kind': kind, 'passed': True, 'answer': answer}
+    elif kind == 'equationValue':
+        # Server-derived exact solutions for bounded, single-variable
+        # polynomial/rational equations, including genuine quadratic tasks.
+        sides = assertion['equation'].split('=')
+        if len(sides) != 2:
+            raise ValueError('Equation must have exactly one equals sign')
+        left, ld = parse(sides[0])
+        right, rd = parse(sides[1])
+        variables = left.free_symbols | right.free_symbols
+        declared = assertion.get('variable')
+        if len(variables) != 1 or declared not in SYMBOLS or variables != {SYMBOLS[declared]}:
+            raise ValueError('Equation variable must match the visible task')
+        variable = SYMBOLS[declared]
+        denominators = ld + rd
+        # Validate the entire original domain before any cancellation.
+        real_poles(denominators)
+        numerator, denominator = s.fraction(bounded(s.cancel(left - right)))
+        if not numerator.is_polynomial(variable) or s.degree(numerator, variable) > 2:
+            raise ValueError('Homework equation requires a polynomial numerator of degree <= 2')
+        if numerator == 0:
+            raise ValueError('Identity requires a different explicit task type')
+        roots = s.solveset(numerator, variable, domain=s.S.Reals)
+        if roots == s.S.EmptySet:
+            roots = []
+        elif not isinstance(roots, s.FiniteSet):
+            raise ValueError('Equation solution set cannot be verified exactly')
+        answers = []
+        for root in sorted(roots, key=s.default_sort_key):
+            if any(s.simplify(d.subs(variable, root)) == 0 for d in denominators + excluded + [denominator]):
+                continue
+            residual = s.simplify((left - right).subs(variable, root))
+            if residual != 0 or residual.has(s.zoo, s.nan, s.oo, -s.oo):
+                raise ValueError('Derived root does not satisfy the original equation')
+            answers.append(canonical_answer(root))
+        return {'kind': kind, 'passed': True, 'variable': declared, 'answers': answers}
     elif kind == 'linearValue':
         sides = assertion['equation'].split('=')
         if len(sides) != 2:
