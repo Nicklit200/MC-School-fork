@@ -48,7 +48,11 @@ final class PostLessonHomeworkCanonicalAdapter {
                 if(!(block.get("spec") instanceof Map<?,?> spec))
                     throw new IllegalArgumentException("HOMEWORK_CANONICAL_VISUAL_MISSING");
                 hasGraph |= "graph".equals(spec.get("type"));
-                expression="visual:"+digest(canonical(spec).toString());
+                // Viewport/language changes alone are not new mathematics.
+                Map<String,Object> fingerprint=new LinkedHashMap<>();
+                spec.forEach((key,value)->fingerprint.put(String.valueOf(key),value));
+                fingerprint.remove("xRange");fingerprint.remove("yRange");fingerprint.remove("language");
+                expression="visual:"+digest(canonical(fingerprint).toString());
             }else{
                 expression=Objects.toString(assertion.get("expression"),"");
                 if(expression.isBlank())expression=Objects.toString(assertion.get("equation"),"");
