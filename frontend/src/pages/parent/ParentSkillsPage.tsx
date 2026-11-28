@@ -149,8 +149,8 @@ function ProgressGraph({ data, language, selectedId, onSelect }: {
               {day:'2-digit',month:'2-digit',timeZone:'Europe/Berlin'}).format(new Date(point.endedAt))}
           </text>
           <title>{description}{improvementCount > 0
-            ? `, ${say(language, 'есть подтверждённый прогресс по транскрипции',
-                  'belegter Fortschritt aus dem Transkript')}` : ''}</title>
+            ? `, ${say(language, 'есть прогресс по навыкам',
+                  'Fortschritt bei den Kompetenzen')}` : ''}</title>
         </g>;
       })}
       {needsCurrentMarker && <g className="parent-progress__current-point"
@@ -425,7 +425,7 @@ export function ParentSkillsPage() {
         {viewMode === 'graph' ? <div role="tabpanel">
         <section className="panel parent-progress__chart-panel">
           <div className="parent-progress__section-title"><h2>{say(language,'Как растут знания','Lernfortschritt im Zeitverlauf')}</h2>
-            <span className="parent-progress__muted">{say(language,'Одна точка = один урок','Ein Punkt = eine Stunde')}</span></div>
+            <span className="parent-progress__muted">{say(language,'Точки уроков + актуальная карта отдельно','Unterrichtspunkte + aktueller Stand separat')}</span></div>
           <ProgressGraph data={data} language={language} selectedId={selectedLessonId}
             onSelect={id => setSelectedLessonId(current => current === id ? null : id)} />
 
