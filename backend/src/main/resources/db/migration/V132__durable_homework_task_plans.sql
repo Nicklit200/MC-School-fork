@@ -8,6 +8,7 @@ CREATE TABLE post_lesson_homework_task_plans (
     student_id uuid NOT NULL,
     day_number integer NOT NULL CHECK (day_number BETWEEN 1 AND 7),
     plan_json text NOT NULL CHECK (length(plan_json) BETWEEN 2 AND 500000),
+    repair_count integer NOT NULL DEFAULT 0 CHECK (repair_count BETWEEN 0 AND 1),
     created_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (job_id, student_id, day_number)
 );
