@@ -99,7 +99,8 @@ public class PostLessonHomeworkReviewController {
         List<byte[]> found=db.query("SELECT "+field+" FROM post_lesson_homework_drafts"
                 +" WHERE job_id=? AND student_id=? AND day_number=?",
                 (rs,i)->rs.getBytes(1),jobId,studentId,day);
-        if(found.isEmpty())throw new ResponseStatusException(HttpStatus.NOT_FOUND,"PDF not generated");
+        if(found.isEmpty() || found.get(0)==null || found.get(0).length==0)
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,"PDF not generated");
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
                 .header(HttpHeaders.CONTENT_DISPOSITION,"inline; filename=\"Mindcrafti_Tag_"+day+"_"
