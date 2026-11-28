@@ -72,7 +72,8 @@ final class McpHomeworkDraftValidator {
             if (num.doubleValue() != n || n < 1 || n > count || !found.add(n))
                 throw new IllegalArgumentException("Homework qa.algebra numbers must uniquely match tasks 1.." + count);
             String kind = String.valueOf(check.get("kind"));
-            if (!Set.of("equivalence","solution","linearSolution","visualValue").contains(kind))
+            if (!Set.of("equivalence","solution","linearSolution","visualValue").contains(kind)
+                    && !(studentOnly && Set.of("expressionValue","linearValue","equationValue").contains(kind)))
                 throw new IllegalArgumentException("Unsupported homework algebra QA assertion kind");
         }
         return mapper.writeValueAsString(doc);
