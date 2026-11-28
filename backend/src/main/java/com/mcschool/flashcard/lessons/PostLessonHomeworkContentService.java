@@ -187,7 +187,14 @@ public class PostLessonHomeworkContentService {
     @SuppressWarnings("unchecked")
     List<Map<String,Object>> prepareTaskSeries(Map<String,Object> evidence,List<Integer> days,int totalDays,
             String studentName,Consumer<PostLessonHomeworkStage> progress)throws Exception {
+        return prepareTaskSeries(evidence,days,totalDays,studentName,progress,2);
+    }
+
+    @SuppressWarnings("unchecked")
+    List<Map<String,Object>> prepareTaskSeries(Map<String,Object> evidence,List<Integer> days,int totalDays,
+            String studentName,Consumer<PostLessonHomeworkStage> progress,int maxAttempts)throws Exception {
         if(days.isEmpty())return List.of();
+        if(maxAttempts<1||maxAttempts>2)throw new IllegalArgumentException("Invalid task plan attempt limit");
         boolean graphLesson=graphDominatesLesson(evidence);
         Map<String,Object> context=new LinkedHashMap<>(evidence);
         context.remove("dayNumber");context.remove("date");
@@ -227,7 +234,7 @@ public class PostLessonHomeworkContentService {
             For each task, cite genuine sourceReference and evidenceStatus; UNCLEAR if not known.
             Return only the requested schema. All exercises must be individually grounded and distinct.
             """;
-        for(int attempt=1;attempt<=2;attempt++){
+        for(int attempt=1;attempt<=maxAttempts;attempt++){
             progress.accept(PostLessonHomeworkStage.AI_CONTENT);
             String response=ask(instruction,context,"homework_task_series",PostLessonHomeworkTaskPlan.schema(days.size()));
             progress.accept(PostLessonHomeworkStage.CONTENT_VALIDATION);
@@ -242,11 +249,17 @@ public class PostLessonHomeworkContentService {
                 String code=reason.matches("HOMEWORK_[A-Z_]{1,90}")?reason:"HOMEWORK_TASK_PLAN_SCHEMA";
                 LOG.warn("Homework task plan rejected attempt={} days={} code={} origin={}",attempt,days.size(),
                         code,PostLessonHomeworkFailure.origin(invalid));
-                if(attempt==2)throw new IllegalStateException("HOMEWORK_DRAFT_VALIDATION_FAILED",invalid);
+                if(attempt==maxAttempts)throw new IllegalStateException("HOMEWORK_DRAFT_VALIDATION_FAILED",invalid);
                 context.put("repairReason",code+": Correct the task content and obey the exact requested days, unique expressions and supported task schema.");
             }
         }
         throw new IllegalStateException("HOMEWORK_DRAFT_VALIDATION_FAILED");
+    }
+
+    static boolean repairableTaskContent(String code){
+        return Set.of("WORKBOOK_RENDER_MATH_QA","WORKBOOK_RENDER_MATH_ANSWER","WORKBOOK_RENDER_MATH_DOMAIN",
+                "WORKBOOK_RENDER_MATH_SYNTAX","WORKBOOK_RENDER_MATH_DISPLAY","WORKBOOK_RENDER_MATH_LINEAR",
+                "WORKBOOK_RENDER_VISUAL_SPEC").contains(code);
     }
 
     /** Render already compiled content. All layout attempts stay on the server. */
