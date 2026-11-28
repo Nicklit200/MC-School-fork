@@ -75,6 +75,8 @@ function homeworkCompactCss(level) {
     '.sheet.student.homework .block, .sheet.student.homework .exercise { margin-top: '+gap+'; }',
     '.sheet.student.homework .block:first-child { margin-top: 0; }',
     '.sheet.student.homework .exercise { padding: 0; }',
+    '.sheet.student.homework .exercise-content { padding: 0; }',
+    '.sheet.student.homework .exercise-title { font-size: 13px; }',
     '.sheet.student.homework .exercise-head { margin-bottom: 0.5mm; }',
     '.sheet.student.homework .exercise-subtitle { margin-top: 0.5mm; }',
     '.sheet.student.homework .callout { padding: 1mm 2mm; min-height: 0; }',
@@ -159,7 +161,7 @@ function exercise(b) {
   const n = Number(b.writeLines ?? 0);
   if(!Number.isInteger(n) || n<0 || n>30)throw new TypeError('Invalid writing line count');
   const gap = lesson.meta.homeworkMode===true && !plain ? 5.6 : 7.2;
-  const height = n ? (2.4*n + gap*(n-1) + (lesson.meta.homeworkMode===true && !plain ? 0 : 1))*(plain?1:safeLayout.answerSpacePercent/100) : 0;
+  const height = n ? (2.4*n + gap*(n-1) + (lesson.meta.homeworkMode===true && !plain ? 0 : 1))*(plain||lesson.meta.homeworkMode===true?1:safeLayout.answerSpacePercent/100) : 0;
   const lines = n ? `<div class="response-lines" data-qa="blank-workspace" style="height:${height.toFixed(2)}mm"></div>` : '';
   const mini = b.extra ? `<div class="mini-check"><span class="small-pill">${richText(b.extra.label)}</span>${math(b.extra.math)}</div>` : '';
   const selfRating = b.selfRating ? (() => {
