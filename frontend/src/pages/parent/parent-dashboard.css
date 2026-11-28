@@ -133,6 +133,73 @@
 }
 
 
+
+/*
+ * Parent homework month is a dense status overview, not a square-tile planner.
+ * Keep all 5-6 weeks visible on typical laptop screens without changing the
+ * teacher/student calendar or hiding assignments in the selected-day detail.
+ */
+.student-shell--parent .parent-dashboard { gap:14px; }
+.student-shell--parent .parent-dashboard__history > .parent-dashboard__section-heading { margin-bottom:9px; }
+.student-shell--parent .homework-calendar[data-compact-days='true'] {
+  padding:14px 16px;
+}
+.student-shell--parent .homework-calendar[data-compact-days='true'] .homework-calendar__toolbar {
+  gap:8px;
+  margin-bottom:10px;
+}
+.student-shell--parent .homework-calendar[data-compact-days='true'] .homework-calendar__summary {
+  gap:7px;
+  margin-bottom:8px;
+}
+.student-shell--parent .homework-calendar[data-compact-days='true'] .homework-calendar__summary-item {
+  gap:6px;
+  padding:8px 11px;
+  border-radius:9px;
+}
+.student-shell--parent .homework-calendar[data-compact-days='true'] .homework-calendar__summary-item > strong {
+  font-size:17px;
+}
+.student-shell--parent .homework-calendar[data-compact-days='true'] .homework-calendar__pending-legend {
+  gap:6px 14px;
+  margin-bottom:9px;
+}
+.student-shell--parent .homework-calendar[data-compact-days='true'] .homework-calendar__weekdays,
+.student-shell--parent .homework-calendar[data-compact-days='true'] .homework-calendar__grid {
+  gap:5px;
+}
+.student-shell--parent .homework-calendar[data-compact-days='true'] .homework-calendar__weekdays {
+  margin-bottom:5px;
+}
+.student-shell--parent .homework-calendar[data-compact-days='true'] .homework-calendar__day {
+  aspect-ratio:auto; /* Do not let wide monitors make the tiles enormously tall. */
+  height:clamp(44px, 6.3svh, 64px);
+  min-height:44px;
+}
+.student-shell--parent .homework-calendar[data-compact-days='true'] .homework-calendar__details {
+  margin-top:12px;
+  padding-top:10px;
+}
+.student-shell--parent .homework-calendar[data-compact-days='true'] .homework-calendar__details-title {
+  margin-bottom:6px;
+}
+.student-shell--parent .homework-calendar[data-compact-days='true'] .parent-dashboard__homework {
+  padding:9px 0;
+}
+@container (max-width:420px) {
+  .student-shell--parent .homework-calendar[data-compact-days='true'] {
+    padding:11px;
+  }
+  .student-shell--parent .homework-calendar[data-compact-days='true'] .homework-calendar__summary-item {
+    padding:7px 5px;
+  }
+  .student-shell--parent .homework-calendar[data-compact-days='true'] .homework-calendar__weekdays,
+  .student-shell--parent .homework-calendar[data-compact-days='true'] .homework-calendar__grid {
+    gap:4px;
+  }
+}
+
+
 /* Parent skill progress: all graphs and evidence are locally rendered from server data. */
 .parent-progress { max-width:1250px; width:100%; }
 .parent-progress .panel { border-radius:18px; }
