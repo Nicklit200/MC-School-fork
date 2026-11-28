@@ -56,6 +56,7 @@ const lesson = JSON.parse(await readFile(lessonPath, 'utf8'));
 // This changes only representation, never mathematical content or answers.
 normalizeLessonMath(lesson);
 validateLesson(lesson);
+const studentOnlyHomework=lesson.meta.homeworkMode===true && lesson.meta.homeworkStudentOnly===true;
 const visualQa = prepareVisualTasks(lesson);
 const css = (await readFile(join(root, 'styles.css'), 'utf8')) + '\n' + layoutCss;
 let homeworkCompactLevel=0;
@@ -411,7 +412,7 @@ const durationMinutes = Number(lesson.meta.durationMinutes);
 if (!Number.isInteger(durationMinutes) || durationMinutes < 30 || durationMinutes > 240) throw Error('Invalid meta.durationMinutes');
 const targets=[
   {key:'Arbeitsheft_'+durationMinutes+'min',title:lesson.meta.homeworkMode===true ? 'Mindcrafti / Mathematik / Hausaufgaben' : 'Mindcrafti / Arbeitsheft',student:true},
-  {key:'Lehrerloesungen_'+durationMinutes+'min',title:'Mindcrafti / Lehrerloesungen',student:false},
+  ...(!studentOnlyHomework?[{key:'Lehrerloesungen_'+durationMinutes+'min',title:'Mindcrafti / Lehrerloesungen',student:false}]:[]),
 ];
 const writeHtml = async () => {
   for(const target of targets){
@@ -460,7 +461,7 @@ if(process.argv.includes('--html-only')) {
         }
         studentRecovery={changed:compacted,pages:lesson.workbookPages};
       }else studentRecovery=repackOverflowPages(lesson.workbookPages,studentReport,false);
-      const teacherRecovery=repackOverflowPages(lesson.teacherPages,teacherReport,true);
+      const teacherRecovery=studentOnlyHomework?{changed:false,pages:[]}:repackOverflowPages(lesson.teacherPages,teacherReport,true);
       if(!studentRecovery.changed && !teacherRecovery.changed)throw error;
       lesson.workbookPages=studentRecovery.pages;
       lesson.teacherPages=teacherRecovery.pages;
